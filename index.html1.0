@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>跳跃躲避障碍物</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: #111;
+      color: #fff;
+      font-family: Arial, sans-serif;
+    }
+
+    #gameContainer {
+      position: relative;
+      width: 900px;
+      max-width: 100%;
+      background: #222;
+      border: 3px solid #555;
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      background: linear-gradient(180deg, #1a1a1a, #0b0b0b);
+    }
+
+    #hud {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 18px;
+      background: #121212;
+    }
+
+    #hud div {
+      font-size: 16px;
+    }
+
+    #watermark {
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255, 255, 255, 0.35);
+      font-size: 20px;
+      letter-spacing: 0.2em;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    #message {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      background: rgba(0, 0, 0, 0.75);
+      color: #fff;
+      font-size: 24px;
+      text-align: center;
+      padding: 20px;
+      visibility: hidden;
+    }
+
+    #message button {
+      margin-top: 16px;
+      padding: 10px 18px;
+      border: none;
+      background: #18a0ff;
+      color: #fff;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 6px;
+    }
+
+    #instructions {
+      margin-top: 16px;
+      font-size: 14px;
+      color: #bbb;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div id="gameContainer">
+    <div id="hud">
+      <div>玩家: 55</div>
+      <div>得分: <span id="score">0</span></div>
+      <div>最高分: <span id="bestScore">0</span></div>
+      <div>速度: <span id="speed">1.0</span></div>
+    </div>
+    <div id="watermark">sjx制作</div>
+    <canvas id="gameCanvas" width="900" height="450"></canvas>
+    <div id="message">
+      <div id="messageText">按空格开始游戏</div>
+      <button id="restartButton">重新开始</button>
+      <div id="instructions">
+        使用 空格 跳跃，A/D 左右移动。越过障碍物即可得分。
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const speedEl = document.getElementById('speed');
+    const message = document.getElementById('message');
+    const messageText = document.getElementById('messageText');
+    const restartButton = document.getElementById('restartButton');
+
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    const groundHeight = 90;
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    const player = {
+      x: 120,
+      y: canvasHeight - groundHeight - 60,
+      width: 50,
+      height: 60,
+      dy: 0,
+      jumpPower: 16,
+      gravity: 0.8,
+      maxY: 0,
+      isJumping: false,
+      isDucking: false,
+      speed: 6,
+    };
+
+    const state = {
+      score: 0,
+      speed: 1,
+      spawnTimer: 0,
+      spawnInterval: 90,
+      obstacles: [],
+      active: false,
+      bestScore: Number(localStorage.getItem('jumpDodgeBestScore') || 0),
+      keys: {
+        Space: false,
+        KeyA: false,
+        KeyD: false,
+      },
+    };
+
+    function playTone(frequency, type = 'sine', duration = 0.08) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.value = frequency;
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.16, audioCtx.currentTime + 0.01);
+      osc.start();
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+      osc.stop(audioCtx.currentTime + duration + 0.02);
+    }
+
+    function playJumpSound() {
+      playTone(440, 'triangle', 0.12);
+    }
+
+    function playScoreSound() {
+      playTone(660, 'square', 0.08);
+    }
+
+    function playFailSound() {
+      playTone(180, 'sawtooth', 0.22);
+    }
+
+    function resetGame() {
+      state.score = 0;
+      state.speed = 1;
+      state.spawnTimer = 0;
+      state.spawnInterval = 90;
+      state.obstacles = [];
+      state.active = true;
+      player.x = 120;
+      player.y = canvasHeight - groundHeight - player.height;
+      player.dy = 0;
+      player.isJumping = false;
+      player.isDucking = false;
+      scoreEl.textContent = state.score;
+      speedEl.textContent = state.speed.toFixed(1);
+      document.getElementById('bestScore').textContent = state.bestScore;
+      message.style.visibility = 'hidden';
+      requestAnimationFrame(gameLoop);
+    }
+
+    function gameOver() {
+      state.active = false;
+      if (state.score > state.bestScore) {
+        state.bestScore = state.score;
+        localStorage.setItem('jumpDodgeBestScore', state.bestScore);
+      }
+      messageText.textContent = '游戏结束! 玩家55 得分: ' + state.score + '，最高分: ' + state.bestScore;
+      document.getElementById('bestScore').textContent = state.bestScore;
+      message.style.visibility = 'visible';
+      playFailSound();
+    }
+
+    function spawnObstacle() {
+      const height = 40 + Math.random() * 50;
+      const width = 30 + Math.random() * 40;
+      const obstacle = {
+        x: canvasWidth + 50,
+        y: canvasHeight - groundHeight - height,
+        width,
+        height,
+        passed: false,
+      };
+      state.obstacles.push(obstacle);
+    }
+
+    function handleInput() {
+      if (!state.active) return;
+      if (state.keys.Space && !player.isJumping) {
+        player.dy = -player.jumpPower;
+        player.isJumping = true;
+        playJumpSound();
+      }
+
+      if (state.keys.KeyA) {
+        player.x -= player.speed;
+      }
+      if (state.keys.KeyD) {
+        player.x += player.speed;
+      }
+
+      player.x = Math.max(10, Math.min(canvasWidth - player.width - 10, player.x));
+    }
+
+    function updatePlayer() {
+      if (player.isJumping) {
+        player.dy += player.gravity;
+        player.y += player.dy;
+        if (player.y >= canvasHeight - groundHeight - player.height) {
+          player.y = canvasHeight - groundHeight - player.height;
+          player.dy = 0;
+          player.isJumping = false;
+        }
+      }
+    }
+
+    function updateObstacles() {
+      state.obstacles.forEach(obstacle => {
+        obstacle.x -= 4 + state.speed * 1.5;
+        if (!obstacle.passed && obstacle.x + obstacle.width < player.x) {
+          obstacle.passed = true;
+          state.score += 1;
+          scoreEl.textContent = state.score;
+          playScoreSound();
+          if (state.score % 5 === 0) {
+            state.speed += 0.2;
+            speedEl.textContent = state.speed.toFixed(1);
+            state.spawnInterval = Math.max(55, state.spawnInterval - 5);
+          }
+        }
+      });
+      state.obstacles = state.obstacles.filter(obstacle => obstacle.x + obstacle.width > -50);
+    }
+
+    function checkCollision() {
+      const playerBox = {
+        x: player.x,
+        y: player.y,
+        width: player.width,
+        height: player.height,
+      };
+      for (const obstacle of state.obstacles) {
+        if (
+          playerBox.x < obstacle.x + obstacle.width &&
+          playerBox.x + playerBox.width > obstacle.x &&
+          playerBox.y < obstacle.y + obstacle.height &&
+          playerBox.y + playerBox.height > obstacle.y
+        ) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function drawScene() {
+      ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+      // ground
+      ctx.fillStyle = '#303030';
+      ctx.fillRect(0, canvasHeight - groundHeight, canvasWidth, groundHeight);
+      ctx.fillStyle = '#444';
+      ctx.fillRect(0, canvasHeight - groundHeight, canvasWidth, 6);
+
+      // player small figure
+      const headRadius = 10;
+      const headX = player.x + player.width / 2;
+      const headY = player.y + 12;
+      ctx.fillStyle = '#57c7ff';
+      ctx.beginPath();
+      ctx.arc(headX, headY, headRadius, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#57c7ff';
+      ctx.fillRect(player.x + 14, player.y + 20, 22, 28); // body
+      ctx.fillRect(player.x + 4, player.y + 28, 10, 22); // left leg
+      ctx.fillRect(player.x + 36, player.y + 28, 10, 22); // right leg
+      ctx.fillRect(player.x, player.y + 22, 12, 8); // left arm
+      ctx.fillRect(player.x + 38, player.y + 22, 12, 8); // right arm
+
+      // face detail
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(headX - 4, headY - 2, 2, 2);
+      ctx.fillRect(headX + 2, headY - 2, 2, 2);
+
+      // obstacles
+      state.obstacles.forEach(obstacle => {
+        ctx.fillStyle = '#f25f5c';
+        ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+      });
+
+      // instructions overlay when paused
+      if (!state.active) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+      }
+    }
+
+    function gameLoop() {
+      if (!state.active) return;
+      handleInput();
+      updatePlayer();
+      updateObstacles();
+
+      if (state.spawnTimer <= 0) {
+        spawnObstacle();
+        state.spawnTimer = state.spawnInterval;
+      }
+      state.spawnTimer -= 1 + state.speed * 0.2;
+
+      if (checkCollision()) {
+        gameOver();
+      }
+
+      drawScene();
+      requestAnimationFrame(gameLoop);
+    }
+
+    window.addEventListener('keydown', event => {
+      const code = event.code;
+      if (code === 'Space' && !state.active) {
+        resetGame();
+      }
+      if (code === 'Space') {
+        state.keys.Space = true;
+      }
+      if (code in state.keys && code !== 'Space') {
+        state.keys[code] = true;
+      }
+    });
+
+    window.addEventListener('keyup', event => {
+      const code = event.code;
+      if (code === 'Space') {
+        state.keys.Space = false;
+      }
+      if (code in state.keys && code !== 'Space') {
+        state.keys[code] = false;
+      }
+    });
+
+    restartButton.addEventListener('click', resetGame);
+    message.style.visibility = 'visible';
+  </script>
+</body>
+</html>
