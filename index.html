@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -44,6 +45,18 @@
       font-size: 16px;
     }
 
+    #watermark {
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255, 255, 255, 0.35);
+      font-size: 20px;
+      letter-spacing: 0.2em;
+      pointer-events: none;
+      z-index: 2;
+    }
+
     #message {
       position: absolute;
       inset: 0;
@@ -86,12 +99,13 @@
       <div>最高分: <span id="bestScore">0</span></div>
       <div>速度: <span id="speed">1.0</span></div>
     </div>
+    <div id="watermark">sjx制作</div>
     <canvas id="gameCanvas" width="900" height="450"></canvas>
     <div id="message">
       <div id="messageText">按空格开始游戏</div>
       <button id="restartButton">重新开始</button>
       <div id="instructions">
-        使用 W 跳跃，S 下蹲，A/D 左右移动。越过障碍物即可得分。
+        使用 空格 跳跃，A/D 左右移动。越过障碍物即可得分。
       </div>
     </div>
   </div>
@@ -133,9 +147,8 @@
       active: false,
       bestScore: Number(localStorage.getItem('jumpDodgeBestScore') || 0),
       keys: {
-        KeyW: false,
+        Space: false,
         KeyA: false,
-        KeyS: false,
         KeyD: false,
       },
     };
@@ -212,16 +225,10 @@
 
     function handleInput() {
       if (!state.active) return;
-      if (state.keys.KeyW && !player.isJumping && !player.isDucking) {
+      if (state.keys.Space && !player.isJumping) {
         player.dy = -player.jumpPower;
         player.isJumping = true;
         playJumpSound();
-      }
-
-      if (state.keys.KeyS && !player.isJumping) {
-        player.isDucking = true;
-      } else {
-        player.isDucking = false;
       }
 
       if (state.keys.KeyA) {
@@ -235,12 +242,6 @@
     }
 
     function updatePlayer() {
-      if (player.isDucking) {
-        player.height = 35;
-      } else {
-        player.height = 60;
-      }
-
       if (player.isJumping) {
         player.dy += player.gravity;
         player.y += player.dy;
@@ -299,11 +300,26 @@
       ctx.fillStyle = '#444';
       ctx.fillRect(0, canvasHeight - groundHeight, canvasWidth, 6);
 
-      // player
+      // player small figure
+      const headRadius = 10;
+      const headX = player.x + player.width / 2;
+      const headY = player.y + 12;
       ctx.fillStyle = '#57c7ff';
-      ctx.fillRect(player.x, player.y, player.width, player.height);
-      ctx.fillStyle = '#1d4f77';
-      ctx.fillRect(player.x + 10, player.y + player.height - 12, player.width - 20, 12);
+      ctx.beginPath();
+      ctx.arc(headX, headY, headRadius, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#57c7ff';
+      ctx.fillRect(player.x + 14, player.y + 20, 22, 28); // body
+      ctx.fillRect(player.x + 4, player.y + 28, 10, 22); // left leg
+      ctx.fillRect(player.x + 36, player.y + 28, 10, 22); // right leg
+      ctx.fillRect(player.x, player.y + 22, 12, 8); // left arm
+      ctx.fillRect(player.x + 38, player.y + 22, 12, 8); // right arm
+
+      // face detail
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(headX - 4, headY - 2, 2, 2);
+      ctx.fillRect(headX + 2, headY - 2, 2, 2);
 
       // obstacles
       state.obstacles.forEach(obstacle => {
@@ -343,14 +359,20 @@
       if (code === 'Space' && !state.active) {
         resetGame();
       }
-      if (code in state.keys) {
+      if (code === 'Space') {
+        state.keys.Space = true;
+      }
+      if (code in state.keys && code !== 'Space') {
         state.keys[code] = true;
       }
     });
 
     window.addEventListener('keyup', event => {
       const code = event.code;
-      if (code in state.keys) {
+      if (code === 'Space') {
+        state.keys.Space = false;
+      }
+      if (code in state.keys && code !== 'Space') {
         state.keys[code] = false;
       }
     });
