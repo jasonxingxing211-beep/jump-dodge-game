@@ -12,7 +12,7 @@
       justify-content: center;
       align-items: center;
       min-height: 100vh;
-      background: #111;
+      background: radial-gradient(circle at top, #2f2f5f, #09090f 68%);
       color: #fff;
       font-family: Arial, sans-serif;
     }
@@ -21,15 +21,15 @@
       position: relative;
       width: 900px;
       max-width: 100%;
-      background: #222;
-      border: 3px solid #555;
-      box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+      background: #12131b;
+      border: 3px solid #4d5b7a;
+      box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
     }
 
     canvas {
       display: block;
       width: 100%;
-      background: linear-gradient(180deg, #1a1a1a, #0b0b0b);
+      background: linear-gradient(180deg, #12131b, #050609);
     }
 
     #hud {
@@ -37,23 +37,28 @@
       justify-content: space-between;
       align-items: center;
       padding: 12px 18px;
-      background: #121212;
+      gap: 12px;
+      flex-wrap: wrap;
+      background: rgba(12, 16, 30, 0.96);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
     }
 
     #hud div {
       font-size: 16px;
+      white-space: nowrap;
     }
 
     #watermark {
       position: absolute;
-      top: 8px;
+      top: 18px;
       left: 50%;
       transform: translateX(-50%);
-      color: rgba(255, 255, 255, 0.35);
-      font-size: 20px;
-      letter-spacing: 0.2em;
+      color: rgba(255, 255, 255, 0.45);
+      font-size: 22px;
+      letter-spacing: 0.25em;
       pointer-events: none;
-      z-index: 2;
+      z-index: 20;
+      text-shadow: 0 0 14px rgba(255,255,255,0.16);
     }
 
     #message {
@@ -63,30 +68,33 @@
       justify-content: center;
       align-items: center;
       flex-direction: column;
-      background: rgba(0, 0, 0, 0.75);
+      background: rgba(2, 4, 12, 0.85);
       color: #fff;
       font-size: 24px;
       text-align: center;
-      padding: 20px;
+      padding: 24px;
       visibility: hidden;
+      z-index: 9;
     }
 
     #message button {
-      margin-top: 16px;
-      padding: 10px 18px;
+      margin-top: 18px;
+      padding: 12px 20px;
       border: none;
-      background: #18a0ff;
+      background: #1f8cff;
       color: #fff;
       font-size: 16px;
       cursor: pointer;
-      border-radius: 6px;
+      border-radius: 8px;
+      box-shadow: 0 6px 18px rgba(31, 140, 255, 0.25);
     }
 
     #instructions {
       margin-top: 16px;
       font-size: 14px;
-      color: #bbb;
+      color: #b8c0e0;
       line-height: 1.6;
+      max-width: 620px;
     }
   </style>
 </head>
@@ -103,9 +111,9 @@
     <canvas id="gameCanvas" width="900" height="450"></canvas>
     <div id="message">
       <div id="messageText">按空格开始游戏</div>
-      <button id="restartButton">重新开始</button>
+      <button id="restartButton">继续</button>
       <div id="instructions">
-        使用 空格 跳跃，A/D 左右移动。越过障碍物即可得分。
+        控制：A/D 左右移动，空格跳跃，J 射击。第二关支持二段跳，长按 J 可蓄力射击。
       </div>
     </div>
   </div>
@@ -126,19 +134,22 @@
 
     const player = {
       x: 120,
-      y: canvasHeight - groundHeight - 60,
-      width: 44,
-      height: 58,
+      y: canvasHeight - groundHeight - 66,
+      width: 48,
+      height: 62,
       dy: 0,
       vx: 0,
-      maxVx: 5,
+      maxVx: 6,
       accel: 0.45,
-      friction: 0.82,
+      friction: 0.84,
       jumpPower: 16,
-      gravity: 0.8,
-      isJumping: false,
+      gravity: 0.85,
+      jumpCount: 0,
+      maxJumps: 1,
       direction: 'right',
-      speed: 6,
+      shootCooldown: 0,
+      charging: false,
+      chargeTime: 0,
     };
 
     const state = {
@@ -146,42 +157,86 @@
       stage: 1,
       speed: 1,
       spawnTimer: 0,
-      spawnInterval: 90,
+      spawnInterval: 82,
       obstacles: [],
+      enemies: [],
+      playerShots: [],
+      enemyShots: [],
+      boss: null,
+      obstaclesCreated: 0,
+      passedObstacles: 0,
+      obstaclesToPass: 55,
+      door: null,
+      doorSequence: false,
+      doorFlashTimer: 0,
+      hintText: '',
+      bossMusic: null,
       active: false,
       bestScore: Number(localStorage.getItem('jumpDodgeBestScore') || 0),
-      countedGroups: new Set(),
+      messageMode: 'start',
       keys: {
         Space: false,
         KeyA: false,
         KeyD: false,
+        KeyJ: false,
       },
     };
 
-    function playTone(frequency, type = 'sine', duration = 0.08) {
+    function playTone(freq, type = 'sine', duration = 0.1) {
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.type = type;
-      osc.frequency.value = frequency;
+      osc.frequency.value = freq;
       osc.connect(gain);
       gain.connect(audioCtx.destination);
-      gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.16, audioCtx.currentTime + 0.01);
+      gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.18, audioCtx.currentTime + 0.02);
       osc.start();
-      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
       osc.stop(audioCtx.currentTime + duration + 0.02);
     }
 
-    function playJumpSound() {
-      playTone(440, 'triangle', 0.12);
+    function playJumpSound() { playTone(520, 'triangle', 0.12); }
+    function playShootSound() { playTone(760, 'square', 0.06); }
+    function playChargeSound() { playTone(340, 'sawtooth', 0.2); }
+    function playEnemyHitSound() { playTone(260, 'triangle', 0.08); }
+    function playBossHitSound() { playTone(180, 'square', 0.1); }
+    function playDoorMusic() {
+      const osc1 = audioCtx.createOscillator();
+      const osc2 = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc1.type = 'triangle';
+      osc2.type = 'sine';
+      osc1.frequency.value = 520;
+      osc2.frequency.value = 660;
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(audioCtx.destination);
+      gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.18, audioCtx.currentTime + 0.02);
+      osc1.start();
+      osc2.start();
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.7);
+      osc1.stop(audioCtx.currentTime + 0.7);
+      osc2.stop(audioCtx.currentTime + 0.7);
+    }
+    function playFailSound() { playTone(140, 'sawtooth', 0.22); }
+    function playWinSound() { playTone(880, 'triangle', 0.18); }
+
+    function showMessage(text, buttonText = '继续', mode = 'info') {
+      messageText.textContent = text;
+      restartButton.textContent = buttonText;
+      message.style.visibility = 'visible';
+      state.active = false;
+      state.messageMode = mode;
     }
 
-    function playScoreSound() {
-      playTone(660, 'square', 0.08);
-    }
-
-    function playFailSound() {
-      playTone(180, 'sawtooth', 0.22);
+    function hideMessage() {
+      message.style.visibility = 'hidden';
+      state.active = true;
+      if (state.stage === 2 && state.messageMode === 'stage2') {
+        state.messageMode = 'playing';
+      }
     }
 
     function resetGame() {
@@ -191,91 +246,203 @@
       state.spawnTimer = 0;
       state.spawnInterval = 90;
       state.obstacles = [];
-      state.countedGroups = new Set();
-      state.active = true;
+      state.enemies = [];
+      state.playerShots = [];
+      state.enemyShots = [];
+      state.boss = null;
+      state.obstaclesCreated = 0;
+      state.passedObstacles = 0;
+      state.door = null;
+      state.doorSequence = false;
+      state.doorFlashTimer = 0;
+      state.hintText = '';
+      stopBossMusic();
       player.x = 120;
       player.y = canvasHeight - groundHeight - player.height;
       player.dy = 0;
       player.vx = 0;
-      player.isJumping = false;
+      player.jumpCount = 0;
+      player.maxJumps = 1;
       player.direction = 'right';
+      player.shootCooldown = 0;
+      player.charging = false;
+      player.chargeTime = 0;
       scoreEl.textContent = state.score;
       speedEl.textContent = state.speed.toFixed(1);
       document.getElementById('stage').textContent = state.stage;
       document.getElementById('bestScore').textContent = state.bestScore;
-      message.style.visibility = 'hidden';
-      requestAnimationFrame(gameLoop);
+      showMessage('按空格开始游戏', '开始', 'start');
+      drawScene();
     }
 
-    function gameOver() {
-      state.active = false;
+    function updateBestScore() {
       if (state.score > state.bestScore) {
         state.bestScore = state.score;
         localStorage.setItem('jumpDodgeBestScore', state.bestScore);
       }
-      messageText.textContent = '游戏失败! 玩家55 得分: ' + state.score + '，最高分: ' + state.bestScore;
+    }
+
+    function createBossMusic() {
+      if (state.bossMusic) return;
+      const osc1 = audioCtx.createOscillator();
+      const osc2 = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc1.type = 'sawtooth';
+      osc2.type = 'square';
+      osc1.frequency.value = 110;
+      osc2.frequency.value = 132;
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(audioCtx.destination);
+      gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.08, audioCtx.currentTime + 0.5);
+      osc1.start();
+      osc2.start();
+      state.bossMusic = {osc1, osc2, gain};
+    }
+
+    function stopBossMusic() {
+      if (!state.bossMusic) return;
+      const {osc1, osc2, gain} = state.bossMusic;
+      gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+      osc1.stop(audioCtx.currentTime + 0.5);
+      osc2.stop(audioCtx.currentTime + 0.5);
+      state.bossMusic = null;
+    }
+
+    function endGame(text) {
+      stopBossMusic();
+      state.active = false;
+      updateBestScore();
       document.getElementById('bestScore').textContent = state.bestScore;
-      message.style.visibility = 'visible';
+      showMessage(text, '重新开始', 'end');
       playFailSound();
     }
 
     function winGame() {
+      stopBossMusic();
       state.active = false;
-      if (state.score > state.bestScore) {
-        state.bestScore = state.score;
-        localStorage.setItem('jumpDodgeBestScore', state.bestScore);
-      }
-      messageText.textContent = '恭喜通关! 玩家55 完成第二关!';
+      updateBestScore();
       document.getElementById('bestScore').textContent = state.bestScore;
-      message.style.visibility = 'visible';
-      playScoreSound();
+      showMessage('恭喜！玩家55 击败 Boss，游戏结束', '重新开始', 'end');
+      playWinSound();
+    }
+
+    function startStage2() {
+      state.stage = 2;
+      state.score = 0;
+      state.speed = 1.1;
+      state.spawnTimer = 0;
+      state.spawnInterval = 90;
+      state.obstacles = [];
+      state.enemies = [];
+      state.playerShots = [];
+      state.enemyShots = [];
+      state.boss = null;
+      state.obstaclesCreated = 0;
+      state.passedObstacles = 0;
+      state.door = null;
+      state.doorSequence = false;
+      state.doorFlashTimer = 0;
+      state.hintText = '';
+      player.jumpCount = 0;
+      player.maxJumps = 2;
+      document.getElementById('stage').textContent = state.stage;
+      scoreEl.textContent = state.score;
+      speedEl.textContent = state.speed.toFixed(1);
+      showMessage('第二关开启！准备迎战小怪，按空格继续', '进入第二关', 'stage2');
     }
 
     function spawnObstacle() {
-      const width = 34 + Math.random() * 24;
-      const x = canvasWidth + 50;
-      const groupId = Date.now() + Math.random();
-
-      if (state.stage === 2) {
-        const topHeight = 90 + Math.random() * 40;
-        const gapHeight = 140 + Math.random() * 30;
-        const bottomHeight = canvasHeight - groundHeight - topHeight - gapHeight;
-        state.obstacles.push({
-          x,
-          y: 0,
-          width,
-          height: topHeight,
-          type: 'top',
-          groupId,
-        });
-        state.obstacles.push({
-          x,
-          y: canvasHeight - groundHeight - bottomHeight,
-          width,
-          height: bottomHeight,
-          type: 'bottom',
-          groupId,
-        });
-        return;
-      }
-
-      const height = 42 + Math.random() * 44;
+      if (state.stage !== 1) return;
+      if (state.obstaclesCreated >= state.obstaclesToPass) return;
+      const width = 32 + Math.random() * 30;
+      const height = 40 + Math.random() * 48;
       state.obstacles.push({
-        x,
+        x: canvasWidth + 40,
         y: canvasHeight - groundHeight - height,
         width,
         height,
-        type: 'bottom',
-        groupId,
+        passed: false,
       });
+      state.obstaclesCreated += 1;
+    }
+
+    function spawnEnemy() {
+      if (state.stage !== 2 || state.boss) return;
+      const type = Math.random() < 0.6 ? 'green' : 'red';
+      const enemy = {
+        x: canvasWidth + 60,
+        y: canvasHeight - groundHeight - 48,
+        width: 46,
+        height: 52,
+        dy: 0,
+        vx: -(2 + state.speed * 0.25),
+        gravity: 0.85,
+        jumpTimer: 0,
+        canJump: true,
+        type,
+        hp: 2,
+        shootTimer: type === 'red' ? 110 : 0,
+        alive: true,
+      };
+      state.enemies.push(enemy);
+    }
+
+    function spawnBoss() {
+      state.boss = {
+        x: canvasWidth + 160,
+        y: 80,
+        width: 120,
+        height: 120,
+        hp: 20,
+        dx: -2,
+        phaseTimer: 120,
+        shootTimer: 60,
+        dashTimer: 180,
+        dashSpeed: 8,
+        inDash: false,
+      };
+      createBossMusic();
+      showMessage('警告：Boss来袭！按空格继续战斗', '挑战 Boss', 'boss');
+    }
+
+    function firePlayerShot(damage) {
+      if (player.shootCooldown > 0) return;
+      const shot = {
+        x: player.x + player.width / 2,
+        y: player.y + 24,
+        vx: 10,
+        vy: 0,
+        radius: 6,
+        damage,
+      };
+      state.playerShots.push(shot);
+      player.shootCooldown = 16;
+      playShootSound();
+    }
+
+    function fireEnemyShot(enemy, vx, vy = 0) {
+      const shot = {
+        x: enemy.x,
+        y: enemy.y + enemy.height / 2,
+        vx,
+        vy,
+        radius: 6,
+        color: '#fc5e5e',
+      };
+      state.enemyShots.push(shot);
     }
 
     function handleInput() {
       if (!state.active) return;
-      if (state.keys.Space && !player.isJumping) {
-        player.dy = -player.jumpPower;
-        player.isJumping = true;
-        playJumpSound();
+
+      if (state.keys.Space && player.jumpCount < player.maxJumps) {
+        if (player.jumpCount === 0 || player.maxJumps === 2) {
+          player.dy = -player.jumpPower;
+          player.jumpCount += 1;
+          playJumpSound();
+        }
       }
 
       if (state.keys.KeyA) {
@@ -288,141 +455,344 @@
       }
 
       player.vx = Math.max(-player.maxVx, Math.min(player.maxVx, player.vx));
+
+      if (state.keys.KeyJ) {
+        if (!player.charging) {
+          player.charging = true;
+          player.chargeTime = 0;
+        } else {
+          player.chargeTime += 1;
+          if (player.chargeTime === 18) {
+            playChargeSound();
+          }
+        }
+      }
     }
 
     function updatePlayer() {
-      if (player.isJumping) {
-        player.dy += player.gravity;
-        player.y += player.dy;
-        if (player.y >= canvasHeight - groundHeight - player.height) {
-          player.y = canvasHeight - groundHeight - player.height;
-          player.dy = 0;
-          player.isJumping = false;
-        }
+      player.dy += player.gravity;
+      player.y += player.dy;
+      if (player.y >= canvasHeight - groundHeight - player.height) {
+        player.y = canvasHeight - groundHeight - player.height;
+        player.dy = 0;
+        player.jumpCount = 0;
       }
 
       player.x += player.vx;
       player.vx *= player.friction;
       if (Math.abs(player.vx) < 0.08) player.vx = 0;
       player.x = Math.max(10, Math.min(canvasWidth - player.width - 10, player.x));
+
+      if (player.shootCooldown > 0) player.shootCooldown -= 1;
     }
 
     function updateObstacles() {
-      state.obstacles.forEach(obstacle => {
-        obstacle.x -= 3.3 + state.speed * 1.1;
-        if (obstacle.x + obstacle.width < player.x) {
-          if (!state.countedGroups.has(obstacle.groupId)) {
-            state.countedGroups.add(obstacle.groupId);
-            state.score += 1;
-            scoreEl.textContent = state.score;
-            playScoreSound();
-            if (state.score % 8 === 0) {
-              state.speed += 0.12;
+      state.obstacles.forEach(obs => {
+        obs.x -= 3.2 + state.speed * 1.1;
+        if (!obs.passed && obs.x + obs.width < 0) {
+          obs.passed = true;
+          state.passedObstacles += 1;
+          state.score = state.passedObstacles;
+          scoreEl.textContent = state.score;
+          if (state.passedObstacles === state.obstaclesToPass) {
+            state.door = {
+              x: canvasWidth - 120,
+              y: canvasHeight - groundHeight - 160,
+              width: 80,
+              height: 140,
+              flash: 0,
+            };
+            state.hintText = '前往闪光大门进入第二关';
+          }
+        }
+      });
+      state.obstacles = state.obstacles.filter(obs => obs.x + obs.width > -40);
+    }
+
+    function updateEnemies() {
+      state.enemies.forEach(enemy => {
+        enemy.x += enemy.vx;
+        enemy.y += enemy.dy;
+        enemy.dy += enemy.gravity;
+
+        if (enemy.y >= canvasHeight - groundHeight - enemy.height) {
+          enemy.y = canvasHeight - groundHeight - enemy.height;
+          enemy.dy = 0;
+          enemy.canJump = true;
+        }
+
+        enemy.jumpTimer -= 1;
+        if (enemy.jumpTimer <= 0 && enemy.canJump) {
+          enemy.jumpTimer = 90 + Math.random() * 60;
+          enemy.dy = -12 - Math.random() * 6;
+          enemy.canJump = false;
+        }
+
+        if (enemy.type === 'red') {
+          enemy.shootTimer -= 1;
+          if (enemy.shootTimer <= 0) {
+            enemy.shootTimer = 120 + Math.random() * 80;
+            fireEnemyShot(enemy, -5, Math.random() * 2 - 1);
+          }
+        }
+      });
+      state.enemies = state.enemies.filter(enemy => enemy.x + enemy.width > -80 && enemy.alive);
+    }
+
+    function updateBoss() {
+      if (!state.boss) return;
+      const boss = state.boss;
+      if (!boss.inDash) {
+        boss.x += boss.dx;
+        if (boss.x < canvasWidth - boss.width - 80) boss.dx = 0;
+      } else {
+        boss.x -= boss.dashSpeed;
+      }
+
+      boss.phaseTimer -= 1;
+      if (boss.phaseTimer <= 0) {
+        boss.phaseTimer = 140;
+        boss.inDash = !boss.inDash;
+      }
+
+      boss.shootTimer -= 1;
+      if (boss.shootTimer <= 0) {
+        boss.shootTimer = 40;
+        const shots = [
+          {vx: -6, vy: 0},
+          {vx: -5, vy: -2},
+          {vx: -5, vy: 2},
+        ];
+        shots.forEach(s => fireEnemyShot(boss, s.vx, s.vy));
+      }
+
+      boss.dashTimer -= 1;
+      if (boss.dashTimer <= 0) {
+        boss.dashTimer = 220;
+        boss.inDash = true;
+        boss.dashSpeed = 10 + Math.random() * 4;
+      }
+    }
+
+    function updatePlayerShots() {
+      state.playerShots.forEach(shot => {
+        shot.x += shot.vx;
+      });
+      state.playerShots = state.playerShots.filter(shot => shot.x < canvasWidth + 20);
+    }
+
+    function updateEnemyShots() {
+      state.enemyShots.forEach(shot => {
+        shot.x += shot.vx;
+        shot.y += shot.vy;
+      });
+      state.enemyShots = state.enemyShots.filter(shot => shot.x > -20 && shot.x < canvasWidth + 20 && shot.y > 0 && shot.y < canvasHeight - groundHeight);
+    }
+
+    function rectOverlap(a, b) {
+      return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+    }
+
+    function pointCircleCollide(px, py, circle) {
+      const dx = px - circle.x;
+      const dy = py - circle.y;
+      return dx * dx + dy * dy <= circle.radius * circle.radius;
+    }
+
+    function handleCollisions() {
+      const playerBox = {x: player.x + 6, y: player.y + 8, width: player.width - 12, height: player.height - 10};
+
+      if (state.stage === 1) {
+        for (const obs of state.obstacles) {
+          if (rectOverlap(playerBox, obs)) {
+            endGame('游戏失败！被障碍物撞到了');
+            return;
+          }
+        }
+        if (state.door) {
+          const doorBox = {x: state.door.x, y: state.door.y, width: state.door.width, height: state.door.height};
+          if (rectOverlap(playerBox, doorBox)) {
+            state.doorSequence = true;
+            state.doorFlashTimer = 120;
+            state.door = null;
+            state.hintText = '传送门闪烁中...';
+            playDoorMusic();
+          }
+        }
+      }
+
+      if (state.stage === 2) {
+        for (const enemy of state.enemies) {
+          if (rectOverlap(playerBox, enemy)) {
+            endGame('游戏失败！被小怪碰到');
+            return;
+          }
+        }
+        if (state.boss && rectOverlap(playerBox, state.boss)) {
+          endGame('游戏失败！被 Boss 撞到了');
+          return;
+        }
+      }
+
+      for (const shot of state.enemyShots) {
+        if (pointCircleCollide(player.x + player.width/2, player.y + 20, shot)) {
+          endGame('游戏失败！被敌人攻击命中');
+          return;
+        }
+      }
+
+      state.playerShots.forEach(shot => {
+        state.enemies.forEach(enemy => {
+          if (!enemy.alive) return;
+          const enemyBox = {x: enemy.x, y: enemy.y, width: enemy.width, height: enemy.height};
+          if (pointCircleCollide(shot.x, shot.y, {x: enemyBox.x + enemyBox.width/2, y: enemyBox.y + enemyBox.height/2, radius: enemy.width/2})) {
+            enemy.hp -= shot.damage;
+            shot.x = canvasWidth + 100;
+            playEnemyHitSound();
+            if (enemy.hp <= 0) {
+              enemy.alive = false;
+              state.score += 5;
+              scoreEl.textContent = state.score;
+              state.speed = Math.min(2.4, state.speed + 0.08);
               speedEl.textContent = state.speed.toFixed(1);
-              state.spawnInterval = Math.max(60, state.spawnInterval - 4);
+              if (state.score >= 55 && !state.boss) spawnBoss();
+            }
+          }
+        });
+        if (state.boss) {
+          const bossBox = {x: state.boss.x, y: state.boss.y, width: state.boss.width, height: state.boss.height};
+          if (pointCircleCollide(shot.x, shot.y, {x: bossBox.x + bossBox.width/2, y: bossBox.y + bossBox.height/2, radius: bossBox.width/2})) {
+            state.boss.hp -= shot.damage;
+            shot.x = canvasWidth + 100;
+            playBossHitSound();
+            if (state.boss.hp <= 0) {
+              state.score += 20;
+              scoreEl.textContent = state.score;
+              winGame();
             }
           }
         }
       });
-      state.obstacles = state.obstacles.filter(obstacle => obstacle.x + obstacle.width > -50);
-
-      if (state.stage === 1 && state.score >= 55) {
-        state.stage = 2;
-        state.score = 0;
-        state.speed = 1.1;
-        state.spawnTimer = 0;
-        state.obstacles = [];
-        state.countedGroups = new Set();
-        document.getElementById('stage').textContent = state.stage;
-        scoreEl.textContent = state.score;
-        speedEl.textContent = state.speed.toFixed(1);
-      }
-
-      if (state.stage === 2 && state.score >= 55) {
-        winGame();
-      }
-    }
-
-    function checkCollision() {
-      const playerBox = {
-        x: player.x,
-        y: player.y,
-        width: player.width,
-        height: player.height,
-      };
-      for (const obstacle of state.obstacles) {
-        if (
-          playerBox.x < obstacle.x + obstacle.width &&
-          playerBox.x + playerBox.width > obstacle.x &&
-          playerBox.y < obstacle.y + obstacle.height &&
-          playerBox.y + playerBox.height > obstacle.y
-        ) {
-          return true;
-        }
-      }
-      return false;
     }
 
     function drawScene() {
       ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-      // ground
-      ctx.fillStyle = '#303030';
+      const skyGradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
+      skyGradient.addColorStop(0, '#131b3a');
+      skyGradient.addColorStop(1, '#05060c');
+      ctx.fillStyle = skyGradient;
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+      ctx.fillStyle = '#212740';
       ctx.fillRect(0, canvasHeight - groundHeight, canvasWidth, groundHeight);
-      ctx.fillStyle = '#444';
-      ctx.fillRect(0, canvasHeight - groundHeight, canvasWidth, 6);
+      ctx.fillStyle = '#3a4767';
+      ctx.fillRect(0, canvasHeight - groundHeight, canvasWidth, 8);
 
-      // player small figure
-      const headRadius = 11;
-      const headX = player.x + player.width / 2;
-      const headY = player.y + 12;
-      ctx.fillStyle = '#57c7ff';
-      ctx.beginPath();
-      ctx.arc(headX, headY, headRadius, 0, Math.PI * 2);
-      ctx.fill();
+      if (state.stage === 1) {
+        state.obstacles.forEach(obs => {
+          ctx.fillStyle = '#d8753a';
+          ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+          ctx.fillStyle = '#9d4b26';
+          ctx.fillRect(obs.x, obs.y, obs.width, 8);
+        });
+      }
 
-      // hair highlight
-      ctx.fillStyle = '#3c9ed8';
-      ctx.beginPath();
-      ctx.arc(headX - 3, headY - 6, 5, 0, Math.PI * 2);
-      ctx.fill();
-
-      // body
-      ctx.fillStyle = '#57c7ff';
-      ctx.beginPath();
-      ctx.moveTo(player.x + 14, player.y + 22);
-      ctx.lineTo(player.x + player.width - 14, player.y + 22);
-      ctx.lineTo(player.x + player.width - 16, player.y + 42);
-      ctx.lineTo(player.x + 16, player.y + 42);
-      ctx.closePath();
-      ctx.fill();
-
-      // legs
-      ctx.fillStyle = '#3c9ed8';
-      ctx.fillRect(player.x + 10, player.y + 38, 10, 22);
-      ctx.fillRect(player.x + 24, player.y + 38, 10, 22);
-
-      // arms
-      ctx.fillRect(player.x + 2, player.y + 26, 10, 8);
-      ctx.fillRect(player.x + player.width - 12, player.y + 26, 10, 8);
-
-      // face detail
-      ctx.fillStyle = '#ffffff';
-      const eyeOffset = player.direction === 'left' ? -3 : 3;
-      ctx.fillRect(headX - 8 + eyeOffset, headY - 3, 2, 2);
-      ctx.fillRect(headX - 2 + eyeOffset, headY - 3, 2, 2);
-      ctx.fillStyle = '#1d1d1d';
-      ctx.fillRect(headX - 4, headY + 4, 8, 2);
-
-      // obstacles
-      state.obstacles.forEach(obstacle => {
-        ctx.fillStyle = obstacle.type === 'top' ? '#f28a5c' : '#f25f5c';
-        ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+      state.playerShots.forEach(shot => {
+        ctx.fillStyle = '#7cff9b';
+        ctx.beginPath();
+        ctx.arc(shot.x, shot.y, shot.radius, 0, Math.PI * 2);
+        ctx.fill();
       });
 
-      // instructions overlay when paused
+      state.enemyShots.forEach(shot => {
+        ctx.fillStyle = shot.color;
+        ctx.beginPath();
+        ctx.arc(shot.x, shot.y, shot.radius, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      state.enemies.forEach(enemy => {
+        ctx.fillStyle = enemy.type === 'green' ? '#5edc5e' : '#ff6c6c';
+        ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+        ctx.fillStyle = '#242424';
+        ctx.fillRect(enemy.x + 10, enemy.y + 14, enemy.width - 20, 10);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(enemy.x + 12, enemy.y + 10, 8, 8);
+        ctx.fillRect(enemy.x + enemy.width - 20, enemy.y + 10, 8, 8);
+        if (enemy.type === 'red') {
+          ctx.fillStyle = '#ffb1b1';
+          ctx.fillRect(enemy.x + 14, enemy.y + enemy.height - 18, 18, 8);
+        }
+      });
+
+      if (state.door) {
+        const glow = 0.5 + 0.5 * Math.sin(Date.now() * 0.012);
+        ctx.fillStyle = `rgba(82, 214, 255, ${0.18 + glow * 0.18})`;
+        ctx.fillRect(state.door.x - 8, state.door.y - 8, state.door.width + 16, state.door.height + 16);
+        ctx.fillStyle = '#5ae2ff';
+        ctx.fillRect(state.door.x, state.door.y, state.door.width, state.door.height);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '18px Arial';
+        ctx.fillText('门', state.door.x + state.door.width / 2 - 10, state.door.y + state.door.height / 2 + 8);
+      }
+      if (state.hintText) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(0, 0, canvasWidth, 46);
+        ctx.fillStyle = '#b8f1ff';
+        ctx.font = '18px Arial';
+        ctx.fillText(state.hintText, 18, 30);
+      }
+      if (state.doorSequence) {
+        const flashAmount = 0.15 + 0.25 * Math.sin(Date.now() * 0.04);
+        ctx.fillStyle = `rgba(255,255,255,${flashAmount})`;
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+      }
+      if (state.boss) {
+        ctx.fillStyle = '#a060ff';
+        ctx.fillRect(state.boss.x, state.boss.y, state.boss.width, state.boss.height);
+        ctx.fillStyle = '#581d95';
+        ctx.fillRect(state.boss.x + 12, state.boss.y + 20, state.boss.width - 24, 16);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(state.boss.x + 18, state.boss.y + 40, 12, 12);
+        ctx.fillRect(state.boss.x + state.boss.width - 30, state.boss.y + 40, 12, 12);
+        ctx.fillStyle = '#ffeb3b';
+        ctx.fillRect(state.boss.x + 42, state.boss.y + 78, 36, 14);
+        ctx.fillStyle = '#fff';
+        ctx.font = '14px Arial';
+        ctx.fillText('BOSS', state.boss.x + 36, state.boss.y + 18);
+        ctx.fillStyle = '#f77';
+        ctx.fillRect(state.boss.x, state.boss.y - 12, state.boss.width * (state.boss.hp / 20), 8);
+      }
+
+      const headX = player.x + player.width / 2;
+      const headY = player.y + 16;
+      ctx.fillStyle = '#8cd6ff';
+      ctx.beginPath();
+      ctx.arc(headX, headY, 12, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#225b8d';
+      ctx.fillRect(player.x + 8, player.y + 24, player.width - 16, 24);
+      ctx.fillStyle = '#4aa0ff';
+      ctx.fillRect(player.x + 8, player.y + 46, player.width - 16, 18);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(player.x + 14, player.y + 29, 8, 8);
+      ctx.fillRect(player.x + player.width - 22, player.y + 29, 8, 8);
+      ctx.fillStyle = '#2a3d5f';
+      ctx.fillRect(player.x + 4, player.y + 38, 10, 8);
+      ctx.fillRect(player.x + player.width - 14, player.y + 38, 10, 8);
+      ctx.fillStyle = '#2a3d5f';
+      ctx.fillRect(player.x + 10, player.y + 60, 10, 16);
+      ctx.fillRect(player.x + 28, player.y + 60, 10, 16);
+      ctx.fillStyle = '#1a1f28';
+      const eyeOffset = player.direction === 'left' ? -3 : 3;
+      ctx.fillRect(headX - 8 + eyeOffset, headY - 4, 3, 3);
+      ctx.fillRect(headX - 2 + eyeOffset, headY - 4, 3, 3);
+      ctx.fillRect(headX - 5, headY + 4, 10, 3);
+
       if (!state.active) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
         ctx.fillRect(0, 0, canvasWidth, canvasHeight);
       }
     }
@@ -431,16 +801,38 @@
       if (!state.active) return;
       handleInput();
       updatePlayer();
-      updateObstacles();
-
-      if (state.spawnTimer <= 0) {
-        spawnObstacle();
-        state.spawnTimer = state.spawnInterval;
+      if (state.stage === 1) updateObstacles();
+      if (state.stage === 2) {
+        updateEnemies();
+        updateBoss();
       }
-      state.spawnTimer -= 1 + state.speed * 0.2;
+      updatePlayerShots();
+      updateEnemyShots();
+      handleCollisions();
 
-      if (checkCollision()) {
-        gameOver();
+      if (state.stage === 1) {
+        if (state.doorSequence) {
+          state.doorFlashTimer -= 1;
+          if (state.doorFlashTimer <= 0) {
+            startStage2();
+            state.doorSequence = false;
+            state.hintText = '';
+          }
+        } else {
+          if (state.spawnTimer <= 0) {
+            spawnObstacle();
+            state.spawnTimer = state.spawnInterval;
+          }
+          state.spawnTimer -= 1 + state.speed * 0.2;
+        }
+      }
+
+      if (state.stage === 2 && !state.boss) {
+        if (state.spawnTimer <= 0) {
+          spawnEnemy();
+          state.spawnTimer = 100 - Math.min(40, state.speed * 16);
+        }
+        state.spawnTimer -= 1 + state.speed * 0.2;
       }
 
       drawScene();
@@ -449,11 +841,18 @@
 
     window.addEventListener('keydown', event => {
       const code = event.code;
-      if (code === 'Space' && !state.active) {
-        resetGame();
-      }
       if (code === 'Space') {
         state.keys.Space = true;
+        if (!state.active && state.messageMode !== 'end') {
+          hideMessage();
+          requestAnimationFrame(gameLoop);
+        }
+        if (!state.active && state.messageMode === 'end') {
+          resetGame();
+        }
+      }
+      if (code === 'KeyJ') {
+        state.keys.KeyJ = true;
       }
       if (code in state.keys && code !== 'Space') {
         state.keys[code] = true;
@@ -462,16 +861,31 @@
 
     window.addEventListener('keyup', event => {
       const code = event.code;
-      if (code === 'Space') {
-        state.keys.Space = false;
+      if (code === 'Space') state.keys.Space = false;
+      if (code === 'KeyJ') {
+        if (player.charging && player.shootCooldown <= 0 && state.active) {
+          const damage = player.chargeTime >= 18 ? 2 : 1;
+          firePlayerShot(damage);
+        }
+        player.charging = false;
+        player.chargeTime = 0;
+        state.keys.KeyJ = false;
       }
       if (code in state.keys && code !== 'Space') {
         state.keys[code] = false;
       }
     });
 
-    restartButton.addEventListener('click', resetGame);
-    message.style.visibility = 'visible';
+    restartButton.addEventListener('click', () => {
+      if (state.messageMode === 'end') {
+        resetGame();
+      } else {
+        hideMessage();
+        requestAnimationFrame(gameLoop);
+      }
+    });
+
+    resetGame();
   </script>
 </body>
 </html>
