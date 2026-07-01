@@ -94,6 +94,7 @@
   <div id="gameContainer">
     <div id="hud">
       <div>玩家: 55</div>
+      <div>关卡: <span id="stage">1</span></div>
       <div>得分: <span id="score">0</span></div>
       <div>最高分: <span id="bestScore">0</span></div>
       <div>速度: <span id="speed">1.0</span></div>
@@ -126,25 +127,30 @@
     const player = {
       x: 120,
       y: canvasHeight - groundHeight - 60,
-      width: 50,
-      height: 60,
+      width: 44,
+      height: 58,
       dy: 0,
+      vx: 0,
+      maxVx: 5,
+      accel: 0.45,
+      friction: 0.82,
       jumpPower: 16,
       gravity: 0.8,
-      maxY: 0,
       isJumping: false,
-      isDucking: false,
+      direction: 'right',
       speed: 6,
     };
 
     const state = {
       score: 0,
+      stage: 1,
       speed: 1,
       spawnTimer: 0,
       spawnInterval: 90,
       obstacles: [],
       active: false,
       bestScore: Number(localStorage.getItem('jumpDodgeBestScore') || 0),
+      countedGroups: new Set(),
       keys: {
         Space: false,
         KeyA: false,
@@ -179,19 +185,23 @@
     }
 
     function resetGame() {
+      state.stage = 1;
       state.score = 0;
       state.speed = 1;
       state.spawnTimer = 0;
       state.spawnInterval = 90;
       state.obstacles = [];
+      state.countedGroups = new Set();
       state.active = true;
       player.x = 120;
       player.y = canvasHeight - groundHeight - player.height;
       player.dy = 0;
+      player.vx = 0;
       player.isJumping = false;
-      player.isDucking = false;
+      player.direction = 'right';
       scoreEl.textContent = state.score;
       speedEl.textContent = state.speed.toFixed(1);
+      document.getElementById('stage').textContent = state.stage;
       document.getElementById('bestScore').textContent = state.bestScore;
       message.style.visibility = 'hidden';
       requestAnimationFrame(gameLoop);
@@ -203,23 +213,61 @@
         state.bestScore = state.score;
         localStorage.setItem('jumpDodgeBestScore', state.bestScore);
       }
-      messageText.textContent = '游戏结束! 玩家55 得分: ' + state.score + '，最高分: ' + state.bestScore;
+      messageText.textContent = '游戏失败! 玩家55 得分: ' + state.score + '，最高分: ' + state.bestScore;
       document.getElementById('bestScore').textContent = state.bestScore;
       message.style.visibility = 'visible';
       playFailSound();
     }
 
+    function winGame() {
+      state.active = false;
+      if (state.score > state.bestScore) {
+        state.bestScore = state.score;
+        localStorage.setItem('jumpDodgeBestScore', state.bestScore);
+      }
+      messageText.textContent = '恭喜通关! 玩家55 完成第二关!';
+      document.getElementById('bestScore').textContent = state.bestScore;
+      message.style.visibility = 'visible';
+      playScoreSound();
+    }
+
     function spawnObstacle() {
-      const height = 40 + Math.random() * 50;
-      const width = 30 + Math.random() * 40;
-      const obstacle = {
-        x: canvasWidth + 50,
+      const width = 34 + Math.random() * 24;
+      const x = canvasWidth + 50;
+      const groupId = Date.now() + Math.random();
+
+      if (state.stage === 2) {
+        const topHeight = 90 + Math.random() * 40;
+        const gapHeight = 140 + Math.random() * 30;
+        const bottomHeight = canvasHeight - groundHeight - topHeight - gapHeight;
+        state.obstacles.push({
+          x,
+          y: 0,
+          width,
+          height: topHeight,
+          type: 'top',
+          groupId,
+        });
+        state.obstacles.push({
+          x,
+          y: canvasHeight - groundHeight - bottomHeight,
+          width,
+          height: bottomHeight,
+          type: 'bottom',
+          groupId,
+        });
+        return;
+      }
+
+      const height = 42 + Math.random() * 44;
+      state.obstacles.push({
+        x,
         y: canvasHeight - groundHeight - height,
         width,
         height,
-        passed: false,
-      };
-      state.obstacles.push(obstacle);
+        type: 'bottom',
+        groupId,
+      });
     }
 
     function handleInput() {
@@ -231,13 +279,15 @@
       }
 
       if (state.keys.KeyA) {
-        player.x -= player.speed;
+        player.vx -= player.accel;
+        player.direction = 'left';
       }
       if (state.keys.KeyD) {
-        player.x += player.speed;
+        player.vx += player.accel;
+        player.direction = 'right';
       }
 
-      player.x = Math.max(10, Math.min(canvasWidth - player.width - 10, player.x));
+      player.vx = Math.max(-player.maxVx, Math.min(player.maxVx, player.vx));
     }
 
     function updatePlayer() {
@@ -250,24 +300,47 @@
           player.isJumping = false;
         }
       }
+
+      player.x += player.vx;
+      player.vx *= player.friction;
+      if (Math.abs(player.vx) < 0.08) player.vx = 0;
+      player.x = Math.max(10, Math.min(canvasWidth - player.width - 10, player.x));
     }
 
     function updateObstacles() {
       state.obstacles.forEach(obstacle => {
-        obstacle.x -= 4 + state.speed * 1.5;
-        if (!obstacle.passed && obstacle.x + obstacle.width < player.x) {
-          obstacle.passed = true;
-          state.score += 1;
-          scoreEl.textContent = state.score;
-          playScoreSound();
-          if (state.score % 5 === 0) {
-            state.speed += 0.2;
-            speedEl.textContent = state.speed.toFixed(1);
-            state.spawnInterval = Math.max(55, state.spawnInterval - 5);
+        obstacle.x -= 3.3 + state.speed * 1.1;
+        if (obstacle.x + obstacle.width < player.x) {
+          if (!state.countedGroups.has(obstacle.groupId)) {
+            state.countedGroups.add(obstacle.groupId);
+            state.score += 1;
+            scoreEl.textContent = state.score;
+            playScoreSound();
+            if (state.score % 8 === 0) {
+              state.speed += 0.12;
+              speedEl.textContent = state.speed.toFixed(1);
+              state.spawnInterval = Math.max(60, state.spawnInterval - 4);
+            }
           }
         }
       });
       state.obstacles = state.obstacles.filter(obstacle => obstacle.x + obstacle.width > -50);
+
+      if (state.stage === 1 && state.score >= 55) {
+        state.stage = 2;
+        state.score = 0;
+        state.speed = 1.1;
+        state.spawnTimer = 0;
+        state.obstacles = [];
+        state.countedGroups = new Set();
+        document.getElementById('stage').textContent = state.stage;
+        scoreEl.textContent = state.score;
+        speedEl.textContent = state.speed.toFixed(1);
+      }
+
+      if (state.stage === 2 && state.score >= 55) {
+        winGame();
+      }
     }
 
     function checkCollision() {
@@ -300,7 +373,7 @@
       ctx.fillRect(0, canvasHeight - groundHeight, canvasWidth, 6);
 
       // player small figure
-      const headRadius = 10;
+      const headRadius = 11;
       const headX = player.x + player.width / 2;
       const headY = player.y + 12;
       ctx.fillStyle = '#57c7ff';
@@ -308,21 +381,42 @@
       ctx.arc(headX, headY, headRadius, 0, Math.PI * 2);
       ctx.fill();
 
+      // hair highlight
+      ctx.fillStyle = '#3c9ed8';
+      ctx.beginPath();
+      ctx.arc(headX - 3, headY - 6, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // body
       ctx.fillStyle = '#57c7ff';
-      ctx.fillRect(player.x + 14, player.y + 20, 22, 28); // body
-      ctx.fillRect(player.x + 4, player.y + 28, 10, 22); // left leg
-      ctx.fillRect(player.x + 36, player.y + 28, 10, 22); // right leg
-      ctx.fillRect(player.x, player.y + 22, 12, 8); // left arm
-      ctx.fillRect(player.x + 38, player.y + 22, 12, 8); // right arm
+      ctx.beginPath();
+      ctx.moveTo(player.x + 14, player.y + 22);
+      ctx.lineTo(player.x + player.width - 14, player.y + 22);
+      ctx.lineTo(player.x + player.width - 16, player.y + 42);
+      ctx.lineTo(player.x + 16, player.y + 42);
+      ctx.closePath();
+      ctx.fill();
+
+      // legs
+      ctx.fillStyle = '#3c9ed8';
+      ctx.fillRect(player.x + 10, player.y + 38, 10, 22);
+      ctx.fillRect(player.x + 24, player.y + 38, 10, 22);
+
+      // arms
+      ctx.fillRect(player.x + 2, player.y + 26, 10, 8);
+      ctx.fillRect(player.x + player.width - 12, player.y + 26, 10, 8);
 
       // face detail
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(headX - 4, headY - 2, 2, 2);
-      ctx.fillRect(headX + 2, headY - 2, 2, 2);
+      const eyeOffset = player.direction === 'left' ? -3 : 3;
+      ctx.fillRect(headX - 8 + eyeOffset, headY - 3, 2, 2);
+      ctx.fillRect(headX - 2 + eyeOffset, headY - 3, 2, 2);
+      ctx.fillStyle = '#1d1d1d';
+      ctx.fillRect(headX - 4, headY + 4, 8, 2);
 
       // obstacles
       state.obstacles.forEach(obstacle => {
-        ctx.fillStyle = '#f25f5c';
+        ctx.fillStyle = obstacle.type === 'top' ? '#f28a5c' : '#f25f5c';
         ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
       });
 
