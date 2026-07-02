@@ -128,7 +128,7 @@
       <div id="messageText">按空格开始游戏</div>
       <button id="restartButton">继续</button>
       <div id="instructions">
-        控制：A/D 左右移动，W / 空格 跳跃（可短按控制高度）。躲避障碍物，冲向闪光大门！
+        控制：A/D 左右移动，W/空格 跳跃，S 下蹲。躲避障碍与天降坠落物，冲向闪光大门！
       </div>
     </div>
   </div>
@@ -174,6 +174,7 @@
       lowJumpGravity: 1.7,
       jumpCount: 0,
       maxJumps: 1,
+      crouching: false,
       direction: 'right',
       shootCooldown: 0,
       charging: false,
@@ -231,7 +232,10 @@
         KeyA: false,
         KeyD: false,
         KeyJ: false,
+        KeyS: false,
       },
+      fallingObjects: [],
+      fallTimer: 120,
     };
 
     /* ============================ 音效 ============================ */
@@ -420,6 +424,7 @@
       player.stretch = 1;
       player.runPhase = 0;
       player.trail = [];
+      player.crouching = false;
     }
 
     function resetGame() {
@@ -434,6 +439,8 @@
       state.playerShots = [];
       state.enemyShots = [];
       state.particles = [];
+      state.fallingObjects = [];
+      state.fallTimer = 120;
       state.boss = null;
       state.obstaclesCreated = 0;
       state.passedObstacles = 0;
@@ -543,7 +550,7 @@
       state.stage = 2;
       state.score = 0;
       state.speed = 1.1;
-      state.spawnTimer = 0;
+      state.spawnTimer = 90; // 开局缓冲，避免一进关就被围
       state.spawnInterval = 90;
       state.obstacles = [];
       state.platforms = [
@@ -575,15 +582,31 @@
     function spawnObstacle() {
       if (state.stage !== 1) return;
       if (state.obstaclesCreated >= state.obstaclesToPass) return;
-      const width = 32 + Math.random() * 30;
-      const height = 40 + Math.random() * 48;
-      state.obstacles.push({
-        x: canvasWidth + 40,
-        y: canvasHeight - groundHeight - height,
-        width,
-        height,
-        passed: false,
-      });
+      const r = Math.random();
+      let type, width, height, y;
+      if (r < 0.4) {
+        type = 'block';
+        width = 34 + Math.random() * 24;
+        height = 40 + Math.random() * 30;
+        y = canvasHeight - groundHeight - height;
+      } else if (r < 0.62) {
+        type = 'tall';
+        width = 30 + Math.random() * 16;
+        height = 74 + Math.random() * 34;
+        y = canvasHeight - groundHeight - height;
+      } else if (r < 0.82) {
+        type = 'spike';
+        width = 40 + Math.random() * 30;
+        height = 30 + Math.random() * 22;
+        y = canvasHeight - groundHeight - height;
+      } else {
+        type = 'floating';
+        height = 36 + Math.random() * 26;
+        width = 62 + Math.random() * 40;
+        const gap = 30 + Math.random() * 10; // 低压顶障碍：站着/跳起会撞，必须下蹲通过
+        y = canvasHeight - groundHeight - gap - height;
+      }
+      state.obstacles.push({ x: canvasWidth + 40, y, width, height, type, passed: false });
       state.obstaclesCreated += 1;
     }
 
@@ -605,28 +628,41 @@
         canJump: true,
         type,
         hp: 2,
-        shootTimer: type === 'red' ? 110 : 0,
         alive: true,
         blink: 0,
+        phase: 'move',
+        skillTimer: 0,
+        pulse: Math.random() * Math.PI * 2,
+        trail: [],
       };
-      if (type === 'flyer') {
-        enemy.width = 42; enemy.height = 38;
-        enemy.baseY = 80 + Math.random() * 130;
+      if (type === 'green') {
+        enemy.width = 44; enemy.height = 48;
+        enemy.y = canvasHeight - groundHeight - enemy.height;
+        enemy.vx = -(2 + state.speed * 0.25);
+        enemy.hp = 2;
+      } else if (type === 'red') {
+        enemy.height = 52;
+        enemy.y = canvasHeight - groundHeight - enemy.height;
+        enemy.vx = -(1.8 + state.speed * 0.2);
+        enemy.hp = 2;
+        enemy.skillTimer = 120 + Math.random() * 60;
+      } else if (type === 'flyer') {
+        enemy.width = 44; enemy.height = 40;
+        enemy.baseY = 80 + Math.random() * 120;
         enemy.y = enemy.baseY;
-        enemy.vx = -(3 + state.speed * 0.4);
+        enemy.vx = -(2.6 + state.speed * 0.35);
         enemy.gravity = 0;
         enemy.floatPhase = Math.random() * Math.PI * 2;
-        enemy.floatAmp = 18 + Math.random() * 34;
+        enemy.floatAmp = 18 + Math.random() * 30;
         enemy.hp = 1;
-        enemy.shootTimer = 70 + Math.random() * 60;
-      } else if (type === 'charger') {
-        enemy.width = 44; enemy.height = 42;
+        enemy.skillTimer = 90 + Math.random() * 60;
+      } else { // charger
+        enemy.width = 46; enemy.height = 44;
         enemy.y = canvasHeight - groundHeight - enemy.height;
-        enemy.vx = -(5.5 + state.speed * 0.6);
+        enemy.vx = -(3 + state.speed * 0.3);
         enemy.hp = 3;
-      } else {
-        enemy.y = canvasHeight - groundHeight - 48;
-        enemy.vx = -(2 + state.speed * 0.25);
+        enemy.phase = 'run';
+        enemy.skillTimer = 70 + Math.random() * 40;
       }
       state.enemies.push(enemy);
     }
@@ -683,14 +719,15 @@
       else playShootSound();
     }
 
-    function fireEnemyShot(enemy, vx, vy = 0) {
+    function fireEnemyShot(enemy, vx, vy = 0, color = '#fc5e5e', homing = 0) {
       state.enemyShots.push({
         x: enemy.x,
         y: enemy.y + enemy.height / 2,
         vx,
         vy,
         radius: 6,
-        color: '#fc5e5e',
+        color,
+        homing,
       });
     }
 
@@ -727,7 +764,10 @@
         }
       }
 
-      const accel = player.onGround ? player.accel : player.airAccel;
+      // 下蹲：仅地面有效，下蹲时移动减速
+      player.crouching = state.keys.KeyS && player.onGround;
+
+      const accel = (player.onGround ? player.accel : player.airAccel) * (player.crouching ? 0.55 : 1);
       if (state.keys.KeyA) {
         player.vx -= accel;
         player.direction = 'left';
@@ -870,22 +910,110 @@
       state.obstacles = state.obstacles.filter(obs => obs.x + obs.width > -40);
     }
 
+    /* ==================== 天降坠落物（需左右躲避） ==================== */
+    function spawnFalling() {
+      const targetX = Math.max(20, Math.min(canvasWidth - 60, player.x + player.vx * 6 + (Math.random() - 0.5) * 70));
+      state.fallingObjects.push({
+        x: targetX, y: -44, width: 36, height: 36,
+        phase: 'warn', timer: 42, vy: 0,
+      });
+    }
+
+    function updateFalling() {
+      state.fallingObjects.forEach(o => {
+        if (o.phase === 'warn') {
+          o.timer -= 1;
+          if (o.timer <= 0) { o.phase = 'fall'; o.vy = 7; o.y = -44; }
+        } else if (o.phase === 'fall') {
+          o.vy += 0.9;
+          o.y += o.vy;
+          if (o.y + o.height >= canvasHeight - groundHeight) {
+            o.phase = 'done';
+            spawnParticles(o.x + o.width / 2, canvasHeight - groundHeight, 18, {
+              color: ['#ffb060', '#ff5b5b', '#ffffff'], angle: -Math.PI / 2, spread: Math.PI,
+              speedMin: 2, speedMax: 5.5, gravity: 0.3, life: 22, size: 3
+            });
+          }
+        }
+      });
+      state.fallingObjects = state.fallingObjects.filter(o => o.phase !== 'done');
+    }
+
+    function drawFalling() {
+      const gy = canvasHeight - groundHeight;
+      state.fallingObjects.forEach(o => {
+        const cxo = o.x + o.width / 2;
+        if (o.phase === 'warn') {
+          const blink = 0.35 + 0.45 * Math.sin(Date.now() * 0.02);
+          ctx.save();
+          ctx.strokeStyle = `rgba(255,80,80,${blink})`;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.ellipse(cxo, gy - 3, o.width * 0.7, 8, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = `rgba(255,80,80,${blink * 0.32})`;
+          ctx.beginPath();
+          ctx.ellipse(cxo, gy - 3, o.width * 0.7, 8, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+          // 顶部下落警示三角
+          ctx.fillStyle = `rgba(255,90,90,${blink})`;
+          ctx.beginPath();
+          ctx.moveTo(cxo - 8, 8);
+          ctx.lineTo(cxo + 8, 8);
+          ctx.lineTo(cxo, 22);
+          ctx.closePath(); ctx.fill();
+        } else if (o.phase === 'fall') {
+          ctx.save();
+          ctx.shadowBlur = 16; ctx.shadowColor = '#ff7b30';
+          // 火焰尾
+          ctx.fillStyle = '#ffce6a';
+          ctx.beginPath();
+          ctx.moveTo(o.x + 4, o.y);
+          ctx.lineTo(cxo, o.y - 22);
+          ctx.lineTo(o.x + o.width - 4, o.y);
+          ctx.closePath(); ctx.fill();
+          // 陨石本体
+          ctx.fillStyle = '#6a4a3a';
+          ctx.beginPath();
+          ctx.arc(cxo, o.y + o.height / 2, o.width / 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#8a6a55';
+          ctx.beginPath();
+          ctx.arc(cxo - 5, o.y + o.height / 2 - 4, 4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      });
+    }
+
     function updateEnemies() {
       state.enemies.forEach(enemy => {
         if (enemy.blink > 0) enemy.blink -= 1;
+        enemy.pulse += 0.15;
 
-        // 飞行怪：不受重力，正弦浮动，朝玩家方向瞄准射击
+        // 拖尾记录（飞行/冲刺怪）
+        if (enemy.type === 'flyer' || enemy.type === 'charger') {
+          enemy.trail.unshift({ x: enemy.x, y: enemy.y });
+          if (enemy.trail.length > 8) enemy.trail.pop();
+        }
+
+        // 浮游炮：空中浮动，技能=朝玩家三连散射
         if (enemy.type === 'flyer') {
           enemy.x += enemy.vx;
           enemy.floatPhase += 0.06;
           enemy.y = enemy.baseY + Math.sin(enemy.floatPhase) * enemy.floatAmp;
-          enemy.shootTimer -= 1;
-          if (enemy.shootTimer <= 0) {
-            enemy.shootTimer = 110 + Math.random() * 70;
+          enemy.skillTimer -= 1;
+          if (enemy.skillTimer <= 0) {
+            enemy.skillTimer = 130 + Math.random() * 60;
             const dx = (player.x + player.width / 2) - enemy.x;
             const dy = (player.y + 20) - (enemy.y + enemy.height / 2);
-            const len = Math.hypot(dx, dy) || 1;
-            fireEnemyShot(enemy, (dx / len) * 5, (dy / len) * 5);
+            const base = Math.atan2(dy, dx);
+            for (let a = -1; a <= 1; a++) {
+              const ang = base + a * 0.28;
+              fireEnemyShot(enemy, Math.cos(ang) * 5, Math.sin(ang) * 5, '#c9a3ff');
+            }
+            spawnParticles(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 8, { color: ['#c9a3ff', '#ffffff'], speedMin: 1, speedMax: 3, gravity: 0, life: 14, size: 2 });
           }
           return;
         }
@@ -909,21 +1037,51 @@
           enemy.canJump = true;
         }
 
-        // 冲刺怪贴地猛冲，不跳跃
-        if (enemy.type !== 'charger') {
+        if (enemy.type === 'green') {
+          // 弹跳晶体：定期跳跃
           enemy.jumpTimer -= 1;
           if (enemy.jumpTimer <= 0 && enemy.canJump) {
-            enemy.jumpTimer = 90 + Math.random() * 60;
-            enemy.dy = -12 - Math.random() * 6;
+            enemy.jumpTimer = 80 + Math.random() * 60;
+            enemy.dy = -12 - Math.random() * 5;
             enemy.canJump = false;
           }
-        }
-
-        if (enemy.type === 'red') {
-          enemy.shootTimer -= 1;
-          if (enemy.shootTimer <= 0) {
-            enemy.shootTimer = 120 + Math.random() * 80;
-            fireEnemyShot(enemy, -5, Math.random() * 2 - 1);
+        } else if (enemy.type === 'red') {
+          // 法师：蓄力预警 → 发射追踪弹
+          enemy.skillTimer -= 1;
+          if (enemy.phase === 'move' && enemy.skillTimer <= 30) enemy.phase = 'aim';
+          if (enemy.skillTimer <= 0) {
+            enemy.phase = 'move';
+            enemy.skillTimer = 150 + Math.random() * 80;
+            const dx = (player.x + player.width / 2) - enemy.x;
+            const dy = (player.y + 20) - (enemy.y + enemy.height / 2);
+            const len = Math.hypot(dx, dy) || 1;
+            fireEnemyShot(enemy, (dx / len) * 4.5, (dy / len) * 4.5, '#ff5e8a', 70);
+            spawnParticles(enemy.x, enemy.y + enemy.height / 2, 12, { color: ['#ff5e8a', '#ffffff'], speedMin: 1, speedMax: 3.5, gravity: 0, life: 16, size: 2 });
+          }
+        } else if (enemy.type === 'charger') {
+          // 冲锋怪：奔跑 → 蓄力预警 → 高速冲刺（留残影）
+          enemy.skillTimer -= 1;
+          if (enemy.phase === 'run') {
+            if (enemy.skillTimer <= 0) {
+              enemy.phase = 'windup';
+              enemy.skillTimer = 36;
+              enemy.vx = -0.3;
+            }
+          } else if (enemy.phase === 'windup') {
+            enemy.vx = -0.3 + Math.sin(enemy.pulse * 3) * 0.6;
+            if (enemy.skillTimer <= 0) {
+              enemy.phase = 'dash';
+              enemy.skillTimer = 60;
+              enemy.vx = -(11 + state.speed);
+              spawnParticles(enemy.x + enemy.width, enemy.y + enemy.height / 2, 14, { color: ['#ff9a3c', '#ffffff'], angle: 0, spread: 1.2, speedMin: 2, speedMax: 5, gravity: 0.1, life: 18, size: 2.5 });
+            }
+          } else if (enemy.phase === 'dash') {
+            if (Math.random() < 0.6) spawnParticles(enemy.x + enemy.width, enemy.y + enemy.height / 2, 2, { color: ['#ff9a3c', '#ffd86a'], speedMin: 0.5, speedMax: 2, gravity: 0.05, life: 12, size: 2 });
+            if (enemy.skillTimer <= 0) {
+              enemy.phase = 'run';
+              enemy.skillTimer = 90 + Math.random() * 50;
+              enemy.vx = -(3 + state.speed * 0.3);
+            }
           }
         }
       });
@@ -1004,6 +1162,16 @@
 
     function updateEnemyShots() {
       state.enemyShots.forEach(shot => {
+        // 追踪弹：一段时间内朝玩家微调方向
+        if (shot.homing && shot.homing > 0) {
+          const dx = (player.x + player.width / 2) - shot.x;
+          const dy = (player.y + 20) - shot.y;
+          const len = Math.hypot(dx, dy) || 1;
+          const sp = Math.hypot(shot.vx, shot.vy) || 4.5;
+          shot.vx += ((dx / len) * sp - shot.vx) * 0.05;
+          shot.vy += ((dy / len) * sp - shot.vy) * 0.05;
+          shot.homing -= 1;
+        }
         shot.x += shot.vx;
         shot.y += shot.vy;
       });
@@ -1022,13 +1190,24 @@
     }
 
     function handleCollisions() {
-      const playerBox = {x: player.x + 6, y: player.y + 8, width: player.width - 12, height: player.height - 10};
+      // 下蹲时碰撞盒变矮（顶部降低），可从低压顶障碍下方钻过
+      const ph = player.crouching ? player.height * 0.5 : player.height;
+      const playerBox = {x: player.x + 6, y: player.y + (player.height - ph) + 8, width: player.width - 12, height: ph - 12};
 
       if (state.stage === 1) {
         for (const obs of state.obstacles) {
           if (rectOverlap(playerBox, obs)) {
             endGame('游戏失败！被障碍物撞到了');
             return;
+          }
+        }
+        for (const o of state.fallingObjects) {
+          if (o.phase === 'fall') {
+            const box = {x: o.x, y: o.y, width: o.width, height: o.height};
+            if (rectOverlap(playerBox, box)) {
+              endGame('游戏失败！被坠落物砸中');
+              return;
+            }
           }
         }
         if (state.door) {
@@ -1242,7 +1421,8 @@
       ctx.save();
       // squash & stretch 以脚底为锚点
       ctx.translate(cx, feetY);
-      ctx.scale(player.squash, player.stretch);
+      const crouchY = player.crouching ? 0.5 : 1;
+      ctx.scale(player.squash * (player.crouching ? 1.2 : 1), player.stretch * crouchY);
       ctx.scale(face, 1);
       // 坐标系：原点脚底中心，向上为 -y，x 已按朝向翻转
 
@@ -1347,17 +1527,76 @@
       ctx.clearRect(0, 0, canvasWidth, canvasHeight);
       drawBackground();
 
-      // 障碍物
+      // 障碍物（多样化：柱子 / 高柱 / 尖刺 / 悬空）
       if (state.stage === 1) {
         state.obstacles.forEach(obs => {
-          ctx.fillStyle = '#d8753a';
-          ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-          ctx.fillStyle = '#e89b5f';
-          ctx.fillRect(obs.x, obs.y, obs.width, 8);
-          ctx.fillStyle = '#9d4b26';
-          ctx.fillRect(obs.x, obs.y + obs.height - 6, obs.width, 6);
+          if (obs.type === 'spike') {
+            const n = Math.max(2, Math.round(obs.width / 16));
+            const sw = obs.width / n;
+            ctx.save();
+            ctx.shadowBlur = 8; ctx.shadowColor = '#ff5b5b';
+            ctx.fillStyle = '#d34b4b';
+            for (let i = 0; i < n; i++) {
+              ctx.beginPath();
+              ctx.moveTo(obs.x + i * sw, obs.y + obs.height);
+              ctx.lineTo(obs.x + i * sw + sw / 2, obs.y);
+              ctx.lineTo(obs.x + (i + 1) * sw, obs.y + obs.height);
+              ctx.closePath(); ctx.fill();
+            }
+            ctx.restore();
+            ctx.fillStyle = '#ffb0b0';
+            for (let i = 0; i < n; i++) {
+              ctx.fillRect(obs.x + i * sw + sw / 2 - 1, obs.y, 2, obs.height * 0.5);
+            }
+            ctx.fillStyle = '#7d2b2b';
+            ctx.fillRect(obs.x, obs.y + obs.height - 5, obs.width, 5);
+          } else if (obs.type === 'floating') {
+            // 悬浮能量束
+            ctx.strokeStyle = 'rgba(90,208,255,0.3)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(obs.x + obs.width / 2, 0);
+            ctx.lineTo(obs.x + obs.width / 2, obs.y);
+            ctx.stroke();
+            ctx.save();
+            ctx.shadowBlur = 14; ctx.shadowColor = '#5ad0ff';
+            const g = ctx.createLinearGradient(obs.x, obs.y, obs.x, obs.y + obs.height);
+            g.addColorStop(0, '#5fc7f5');
+            g.addColorStop(1, '#2d7fb8');
+            ctx.fillStyle = g;
+            ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+            ctx.restore();
+            ctx.fillStyle = '#cdeeff';
+            ctx.fillRect(obs.x, obs.y, obs.width, 6);
+            ctx.fillStyle = '#bfe9ff';
+            ctx.fillRect(obs.x, obs.y + obs.height - 4, obs.width, 4);
+          } else if (obs.type === 'tall') {
+            const g = ctx.createLinearGradient(obs.x, obs.y, obs.x, obs.y + obs.height);
+            g.addColorStop(0, '#b26bff');
+            g.addColorStop(1, '#6a2fb0');
+            ctx.fillStyle = g;
+            ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+            ctx.fillStyle = '#e0c0ff';
+            ctx.fillRect(obs.x, obs.y, obs.width, 8);
+            ctx.fillStyle = 'rgba(255,255,255,0.18)';
+            ctx.fillRect(obs.x + 4, obs.y + 12, 4, obs.height - 20);
+            ctx.fillStyle = '#4a1d80';
+            ctx.fillRect(obs.x, obs.y + obs.height - 6, obs.width, 6);
+          } else { // block
+            const g = ctx.createLinearGradient(obs.x, obs.y, obs.x, obs.y + obs.height);
+            g.addColorStop(0, '#e8a05f');
+            g.addColorStop(1, '#b8642f');
+            ctx.fillStyle = g;
+            ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+            ctx.fillStyle = '#f2c48a';
+            ctx.fillRect(obs.x, obs.y, obs.width, 8);
+            ctx.fillStyle = '#8a4a22';
+            ctx.fillRect(obs.x, obs.y + obs.height - 6, obs.width, 6);
+          }
         });
       }
+      // 天降坠落物（预警圈 + 陨石）
+      if (state.stage === 1) drawFalling();
       // 平台
       if (state.stage === 2) {
         state.platforms.forEach(platform => {
@@ -1422,66 +1661,108 @@
         ctx.restore();
       });
 
-      // 敌人
+      // 敌人（炫酷造型 + 技能预警 + 拖尾）
       state.enemies.forEach(enemy => {
         const flash = enemy.blink > 0;
+        const cx = enemy.x + enemy.width / 2;
+        const cy = enemy.y + enemy.height / 2;
+
+        // 拖尾残影（飞行/冲刺）
+        if (enemy.trail && enemy.trail.length) {
+          for (let i = 1; i < enemy.trail.length; i++) {
+            const tp = enemy.trail[i];
+            ctx.save();
+            ctx.globalAlpha = 0.12 * (1 - i / enemy.trail.length);
+            ctx.fillStyle = enemy.type === 'charger' ? '#ff9a3c' : '#c9a3ff';
+            ctx.fillRect(tp.x + 6, tp.y + 6, enemy.width - 12, enemy.height - 12);
+            ctx.restore();
+          }
+        }
+
         if (enemy.type === 'flyer') {
-          // 飞行怪：紫色圆身 + 拍动的三角翅膀
+          // 浮游炮：发光圆身 + 拍翅 + 脉动单眼
           const wf = Math.sin(Date.now() * 0.03) * 6;
-          ctx.fillStyle = flash ? '#ffffff' : '#e0b3ff';
-          ctx.beginPath();
-          ctx.moveTo(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
-          ctx.lineTo(enemy.x - 8, enemy.y + wf);
-          ctx.lineTo(enemy.x - 8, enemy.y + enemy.height - wf);
-          ctx.closePath(); ctx.fill();
-          ctx.beginPath();
-          ctx.moveTo(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
-          ctx.lineTo(enemy.x + enemy.width + 8, enemy.y + wf);
-          ctx.lineTo(enemy.x + enemy.width + 8, enemy.y + enemy.height - wf);
-          ctx.closePath(); ctx.fill();
           ctx.save();
-          ctx.shadowBlur = 12; ctx.shadowColor = '#c17cff';
-          ctx.fillStyle = flash ? '#ffffff' : '#b45cff';
+          ctx.shadowBlur = 14; ctx.shadowColor = '#a86cff';
+          ctx.fillStyle = flash ? '#ffffff' : '#d8b0ff';
           ctx.beginPath();
-          ctx.arc(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, enemy.width / 2, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.moveTo(cx, cy); ctx.lineTo(enemy.x - 8, enemy.y + wf); ctx.lineTo(enemy.x - 8, enemy.y + enemy.height - wf); ctx.closePath(); ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(cx, cy); ctx.lineTo(enemy.x + enemy.width + 8, enemy.y + wf); ctx.lineTo(enemy.x + enemy.width + 8, enemy.y + enemy.height - wf); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = flash ? '#ffffff' : '#a24cff';
+          ctx.beginPath(); ctx.arc(cx, cy, enemy.width / 2, 0, Math.PI * 2); ctx.fill();
           ctx.restore();
-          ctx.fillStyle = '#2a0a3a';
-          ctx.fillRect(enemy.x + enemy.width / 2 - 7, enemy.y + enemy.height / 2 - 3, 4, 5);
-          ctx.fillRect(enemy.x + enemy.width / 2 + 3, enemy.y + enemy.height / 2 - 3, 4, 5);
+          const eye = 0.5 + 0.5 * Math.sin(enemy.pulse);
+          ctx.fillStyle = `rgba(255,80,140,${0.6 + eye * 0.4})`;
+          ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2); ctx.fill();
         } else if (enemy.type === 'charger') {
-          // 冲刺怪：橙色尖锐箭头 + 速度线
+          // 冲锋怪：尖箭头，蓄力时红光闪烁 + 感叹号预警
+          const windup = enemy.phase === 'windup';
+          const dashing = enemy.phase === 'dash';
           ctx.save();
-          ctx.shadowBlur = 10; ctx.shadowColor = '#ff9a3c';
-          ctx.fillStyle = flash ? '#ffffff' : '#ff9a3c';
+          ctx.shadowBlur = dashing ? 20 : (windup ? 14 : 8);
+          ctx.shadowColor = windup ? '#ff3030' : '#ff9a3c';
+          const col = flash ? '#fff' : windup ? (Math.sin(enemy.pulse * 4) > 0 ? '#ff3030' : '#ffb060') : '#ff9a3c';
+          ctx.fillStyle = col;
           ctx.beginPath();
           ctx.moveTo(enemy.x, enemy.y);
-          ctx.lineTo(enemy.x + enemy.width, enemy.y + enemy.height / 2);
+          ctx.lineTo(enemy.x + enemy.width, cy);
           ctx.lineTo(enemy.x, enemy.y + enemy.height);
           ctx.closePath(); ctx.fill();
           ctx.restore();
-          ctx.fillStyle = '#5a2a00';
-          ctx.fillRect(enemy.x + 6, enemy.y + enemy.height / 2 - 4, 8, 4);
-          ctx.strokeStyle = 'rgba(255,180,100,0.6)';
-          ctx.lineWidth = 2;
-          for (let k = 1; k <= 3; k++) {
-            ctx.beginPath();
-            ctx.moveTo(enemy.x + enemy.width + k * 6, enemy.y + enemy.height / 2 - 6);
-            ctx.lineTo(enemy.x + enemy.width + k * 11, enemy.y + enemy.height / 2 - 6);
-            ctx.stroke();
+          ctx.fillStyle = '#5a1500';
+          ctx.fillRect(enemy.x + 8, cy - 4, 8, 4);
+          if (windup) {
+            ctx.fillStyle = '#ff3030';
+            ctx.font = 'bold 20px Arial';
+            ctx.fillText('!', cx - 4, enemy.y - 6);
           }
-        } else {
-          // 普通绿/红怪
-          ctx.fillStyle = flash ? '#ffffff' : (enemy.type === 'green' ? '#5edc5e' : '#ff6c6c');
+        } else if (enemy.type === 'green') {
+          // 晶体怪：发光菱形 + 脉动内核
+          ctx.save();
+          ctx.shadowBlur = 14; ctx.shadowColor = '#4ff0a0';
+          ctx.fillStyle = flash ? '#fff' : '#3fe08a';
+          ctx.beginPath();
+          ctx.moveTo(cx, enemy.y);
+          ctx.lineTo(enemy.x + enemy.width, cy);
+          ctx.lineTo(cx, enemy.y + enemy.height);
+          ctx.lineTo(enemy.x, cy);
+          ctx.closePath(); ctx.fill();
+          ctx.restore();
+          ctx.fillStyle = `rgba(200,255,230,${0.6 + 0.4 * Math.sin(enemy.pulse)})`;
+          ctx.beginPath(); ctx.arc(cx, cy, 7, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#0c2a1a';
+          ctx.fillRect(cx - 6, cy - 2, 4, 4);
+          ctx.fillRect(cx + 2, cy - 2, 4, 4);
+        } else { // red 法师
+          const aiming = enemy.phase === 'aim';
+          ctx.save();
+          ctx.shadowBlur = aiming ? 18 : 8;
+          ctx.shadowColor = '#ff5e8a';
+          const col = flash ? '#fff' : aiming ? (Math.sin(enemy.pulse * 5) > 0 ? '#ff3060' : '#ff8fae') : '#ff6c6c';
+          ctx.fillStyle = col;
           ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
-          ctx.fillStyle = '#242424';
-          ctx.fillRect(enemy.x + 10, enemy.y + 14, enemy.width - 20, 10);
+          ctx.restore();
+          // 兜帽尖顶
+          ctx.fillStyle = flash ? '#fff' : '#c0304f';
+          ctx.beginPath();
+          ctx.moveTo(enemy.x, enemy.y + 6);
+          ctx.lineTo(cx, enemy.y - 12);
+          ctx.lineTo(enemy.x + enemy.width, enemy.y + 6);
+          ctx.closePath(); ctx.fill();
           ctx.fillStyle = '#fff';
-          ctx.fillRect(enemy.x + 12, enemy.y + 10, 8, 8);
-          ctx.fillRect(enemy.x + enemy.width - 20, enemy.y + 10, 8, 8);
-          if (enemy.type === 'red') {
-            ctx.fillStyle = '#ffb1b1';
-            ctx.fillRect(enemy.x + 14, enemy.y + enemy.height - 18, 18, 8);
+          ctx.fillRect(enemy.x + 12, enemy.y + 14, 8, 8);
+          ctx.fillRect(enemy.x + enemy.width - 20, enemy.y + 14, 8, 8);
+          // 蓄力法球预警
+          if (aiming) {
+            const gr = ctx.createRadialGradient(enemy.x, cy, 0, enemy.x, cy, 12);
+            gr.addColorStop(0, '#ffffff');
+            gr.addColorStop(0.5, '#ff5e8a');
+            gr.addColorStop(1, 'rgba(255,94,138,0)');
+            ctx.fillStyle = gr;
+            ctx.beginPath(); ctx.arc(enemy.x, cy, 12, 0, Math.PI * 2); ctx.fill();
           }
         }
       });
@@ -1655,16 +1936,23 @@
           state.spawnTimer -= 1 + state.speed * 0.2;
           state.speed = Math.min(3.2, state.speed + 0.0012);
           speedEl.textContent = state.speed.toFixed(1);
+          // 天降坠落物：定期生成，需左右移动躲避
+          state.fallTimer -= 1;
+          if (state.fallTimer <= 0) {
+            spawnFalling();
+            state.fallTimer = 150 - Math.min(80, state.speed * 28);
+          }
         }
+        updateFalling();
       }
 
       if (state.stage === 2 && !state.boss) {
+        // 生成放缓：一次只来一个，间隔更大，不再成群
         if (state.spawnTimer <= 0) {
           spawnEnemy();
-          if (Math.random() < 0.35) spawnEnemy(); // 偶尔成组来袭，提升压迫感
-          state.spawnTimer = 105 - Math.min(45, state.speed * 14);
+          state.spawnTimer = 175 - Math.min(55, state.speed * 12);
         }
-        state.spawnTimer -= 1 + state.speed * 0.15;
+        state.spawnTimer -= 1 + state.speed * 0.1;
       }
     }
 
