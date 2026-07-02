@@ -128,7 +128,7 @@
       <div id="messageText">按空格开始游戏</div>
       <button id="restartButton">继续</button>
       <div id="instructions">
-        控制：A/D 左右移动，空格跳跃（可短按控制高度 / 二段跳），J 键蓄力射击。躲避障碍物，前往闪光大门。
+        控制：A/D 左右移动，W / 空格 跳跃（可短按控制高度）。躲避障碍物，冲向闪光大门！
       </div>
     </div>
   </div>
@@ -146,6 +146,15 @@
     const canvasHeight = canvas.height;
     const groundHeight = 90;
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // HiDPI：按屏幕像素密度提升画布实际分辨率，避免高分屏下发虚发糊
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = canvasWidth * dpr;
+    canvas.height = canvasHeight * dpr;
+    canvas.style.width = '100%';
+    canvas.style.height = 'auto';
+    ctx.scale(dpr, dpr);
+    ctx.imageSmoothingEnabled = true;
 
     const player = {
       x: 120,
@@ -215,6 +224,7 @@
       bestScore: Number(localStorage.getItem('jumpDodgeBestScore') || 0),
       shakeTimer: 0,
       shakeStrength: 0,
+      shakeBase: 0,
       messageMode: 'start',
       keys: {
         Space: false,
@@ -241,7 +251,25 @@
 
     function playJumpSound() { playTone(520, 'triangle', 0.12); }
     function playDoubleJumpSound() { playTone(680, 'triangle', 0.12); }
-    function playLandSound() { playTone(170, 'sine', 0.07); }
+    function playLandSound(impact = 0.5) {
+      // 厚重的落地"咚"：低频下滑 + 冲击越大越响越低
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      const f = 190 + impact * 40;
+      osc.frequency.setValueAtTime(f, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(55, audioCtx.currentTime + 0.13);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      const vol = 0.12 + impact * 0.22;
+      gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(vol, audioCtx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.22);
+      // 冲击较大时叠一层短促噪声"啪"，增加打击感
+      if (impact > 0.45) playTone(90, 'triangle', 0.05);
+    }
     function playShootSound() { playTone(760, 'square', 0.06); }
     function playChargeSound() {
       const osc = audioCtx.createOscillator();
@@ -484,6 +512,7 @@
     function addShake(strength, time) {
       state.shakeStrength = Math.max(state.shakeStrength, strength);
       state.shakeTimer = Math.max(state.shakeTimer, time);
+      state.shakeBase = Math.max(state.shakeBase, time);
     }
 
     function endGame(text) {
@@ -517,7 +546,10 @@
       state.spawnTimer = 0;
       state.spawnInterval = 90;
       state.obstacles = [];
-      state.platforms = [];
+      state.platforms = [
+        { x: 250, y: canvasHeight - groundHeight - 96, width: 150, height: 14 },
+        { x: 540, y: canvasHeight - groundHeight - 168, width: 140, height: 14 },
+      ];
       state.enemies = [];
       state.playerShots = [];
       state.enemyShots = [];
@@ -557,14 +589,17 @@
 
     function spawnEnemy() {
       if (state.stage !== 2 || state.boss) return;
-      const type = Math.random() < 0.6 ? 'green' : 'red';
+      const r = Math.random();
+      let type;
+      if (r < 0.38) type = 'green';
+      else if (r < 0.62) type = 'red';
+      else if (r < 0.83) type = 'flyer';
+      else type = 'charger';
       const enemy = {
         x: canvasWidth + 60,
-        y: canvasHeight - groundHeight - 48,
         width: 46,
         height: 52,
         dy: 0,
-        vx: -(2 + state.speed * 0.25),
         gravity: 0.85,
         jumpTimer: 0,
         canJump: true,
@@ -574,6 +609,25 @@
         alive: true,
         blink: 0,
       };
+      if (type === 'flyer') {
+        enemy.width = 42; enemy.height = 38;
+        enemy.baseY = 80 + Math.random() * 130;
+        enemy.y = enemy.baseY;
+        enemy.vx = -(3 + state.speed * 0.4);
+        enemy.gravity = 0;
+        enemy.floatPhase = Math.random() * Math.PI * 2;
+        enemy.floatAmp = 18 + Math.random() * 34;
+        enemy.hp = 1;
+        enemy.shootTimer = 70 + Math.random() * 60;
+      } else if (type === 'charger') {
+        enemy.width = 44; enemy.height = 42;
+        enemy.y = canvasHeight - groundHeight - enemy.height;
+        enemy.vx = -(5.5 + state.speed * 0.6);
+        enemy.hp = 3;
+      } else {
+        enemy.y = canvasHeight - groundHeight - 48;
+        enemy.vx = -(2 + state.speed * 0.25);
+      }
       state.enemies.push(enemy);
     }
 
@@ -604,24 +658,28 @@
 
     function firePlayerShot(damage, charged = false) {
       if (player.shootCooldown > 0) return;
+      const dir = player.direction === 'left' ? -1 : 1;
+      const muzzleX = player.x + player.width / 2 + dir * (player.width / 2 + 4);
       const shot = {
-        x: player.x + player.width / 2,
+        x: muzzleX,
         y: player.y + 24,
-        vx: charged ? 15 : 11,
+        vx: (charged ? 16 : 11) * dir,
         vy: 0,
-        radius: charged ? 12 : 6,
+        radius: charged ? 20 : 6,
         damage,
         color: charged ? '#7effff' : '#7cff9b',
         charged,
+        spin: 0,
       };
       state.playerShots.push(shot);
-      player.shootCooldown = charged ? 24 : 14;
-      // 枪口粒子
-      spawnParticles(shot.x, shot.y, charged ? 12 : 5, {
-        color: charged ? ['#7effff', '#ffffff'] : ['#7cff9b', '#ffffff'],
-        angle: 0, spread: 0.6, speedMin: 1, speedMax: 3, gravity: 0, life: 12, size: charged ? 3 : 2
+      player.shootCooldown = charged ? 26 : 14;
+      // 枪口粒子（朝射击方向喷发）
+      spawnParticles(muzzleX, shot.y, charged ? 20 : 5, {
+        color: charged ? ['#7effff', '#ffffff', '#b6fff0'] : ['#7cff9b', '#ffffff'],
+        angle: dir > 0 ? 0 : Math.PI, spread: charged ? 1.1 : 0.6,
+        speedMin: 1, speedMax: charged ? 5 : 3, gravity: 0, life: charged ? 18 : 12, size: charged ? 3.5 : 2
       });
-      if (charged) { playChargeReleaseSound(); addShake(4, 6); }
+      if (charged) { playChargeReleaseSound(); addShake(7, 10); }
       else playShootSound();
     }
 
@@ -713,6 +771,7 @@
       if (player.dy > 20) player.dy = 20;
 
       const prevY = player.y;
+      const fallSpeed = player.dy; // 落地前的下落速度，用于计算冲击强度
       player.y += player.dy;
       const wasOnGround = player.onGround;
       player.onGround = false;
@@ -737,13 +796,25 @@
       if (player.onGround) {
         player.coyoteTimer = player.coyoteMax;
         if (!wasOnGround) {
-          player.squash = 0.62; player.stretch = 1.4;
-          addShake(3, 4);
-          spawnParticles(player.x + player.width / 2, player.y + player.height, 12, {
-            color: ['#c9d4ff', '#ffffff'], angle: -Math.PI / 2, spread: Math.PI * 0.9,
-            speedMin: 1, speedMax: 3.4, gravity: 0.22, life: 20, size: 2.6
+          // 冲击强度：下落越快，震动/压扁/尘土越强（0~1）
+          const impact = Math.min(1, Math.max(0, fallSpeed / 15));
+          player.squash = 0.68 - impact * 0.3;
+          player.stretch = 1.24 + impact * 0.42;
+          // 向上扬起的尘土
+          const dust = Math.round(10 + impact * 18);
+          spawnParticles(player.x + player.width / 2, player.y + player.height, dust, {
+            color: ['#c9d4ff', '#ffffff'], angle: -Math.PI / 2, spread: Math.PI * 0.95,
+            speedMin: 1, speedMax: 2.5 + impact * 4.5, gravity: 0.24, life: 20 + impact * 14, size: 2.6
           });
-          playLandSound();
+          // 向左右扩散的冲击波尘土（冲击越大越明显）
+          const wave = Math.round(impact * 12);
+          spawnParticles(player.x + player.width / 2, player.y + player.height, wave, {
+            color: ['#aeb8e0', '#ffffff'], angle: 0, spread: 0.35, speedMin: 3 + impact * 3, speedMax: 6 + impact * 5, gravity: 0.22, life: 18, size: 2.2
+          });
+          spawnParticles(player.x + player.width / 2, player.y + player.height, wave, {
+            color: ['#aeb8e0', '#ffffff'], angle: Math.PI, spread: 0.35, speedMin: 3 + impact * 3, speedMax: 6 + impact * 5, gravity: 0.22, life: 18, size: 2.2
+          });
+          playLandSound(impact);
         }
       }
 
@@ -778,7 +849,7 @@
 
     function updateObstacles() {
       state.obstacles.forEach(obs => {
-        obs.x -= 3.5 + state.speed * 1.15;
+        obs.x -= 5.5 + state.speed * 1.6;
         if (!obs.passed && obs.x + obs.width < 0) {
           obs.passed = true;
           state.passedObstacles += 1;
@@ -801,11 +872,28 @@
 
     function updateEnemies() {
       state.enemies.forEach(enemy => {
+        if (enemy.blink > 0) enemy.blink -= 1;
+
+        // 飞行怪：不受重力，正弦浮动，朝玩家方向瞄准射击
+        if (enemy.type === 'flyer') {
+          enemy.x += enemy.vx;
+          enemy.floatPhase += 0.06;
+          enemy.y = enemy.baseY + Math.sin(enemy.floatPhase) * enemy.floatAmp;
+          enemy.shootTimer -= 1;
+          if (enemy.shootTimer <= 0) {
+            enemy.shootTimer = 110 + Math.random() * 70;
+            const dx = (player.x + player.width / 2) - enemy.x;
+            const dy = (player.y + 20) - (enemy.y + enemy.height / 2);
+            const len = Math.hypot(dx, dy) || 1;
+            fireEnemyShot(enemy, (dx / len) * 5, (dy / len) * 5);
+          }
+          return;
+        }
+
         const prevY = enemy.y;
         enemy.x += enemy.vx;
         enemy.y += enemy.dy;
         enemy.dy += enemy.gravity;
-        if (enemy.blink > 0) enemy.blink -= 1;
 
         for (const platform of state.platforms) {
           if (enemy.dy >= 0 && prevY + enemy.height <= platform.y && enemy.y + enemy.height >= platform.y && enemy.x + enemy.width > platform.x + 6 && enemy.x < platform.x + platform.width - 6) {
@@ -821,11 +909,14 @@
           enemy.canJump = true;
         }
 
-        enemy.jumpTimer -= 1;
-        if (enemy.jumpTimer <= 0 && enemy.canJump) {
-          enemy.jumpTimer = 90 + Math.random() * 60;
-          enemy.dy = -12 - Math.random() * 6;
-          enemy.canJump = false;
+        // 冲刺怪贴地猛冲，不跳跃
+        if (enemy.type !== 'charger') {
+          enemy.jumpTimer -= 1;
+          if (enemy.jumpTimer <= 0 && enemy.canJump) {
+            enemy.jumpTimer = 90 + Math.random() * 60;
+            enemy.dy = -12 - Math.random() * 6;
+            enemy.canJump = false;
+          }
         }
 
         if (enemy.type === 'red') {
@@ -895,8 +986,20 @@
     }
 
     function updatePlayerShots() {
-      state.playerShots.forEach(shot => { shot.x += shot.vx; });
-      state.playerShots = state.playerShots.filter(shot => shot.x < canvasWidth + 20);
+      state.playerShots.forEach(shot => {
+        shot.x += shot.vx;
+        if (shot.charged) {
+          shot.spin = (shot.spin || 0) + 0.3;
+          // 沿途发光拖尾
+          if (Math.random() < 0.9) {
+            spawnParticles(shot.x, shot.y, 2, {
+              color: ['#8df4ff', '#ffffff', '#b6fff0'], speedMin: 0.2, speedMax: 1.2,
+              gravity: 0, life: 14, size: 3
+            });
+          }
+        }
+      });
+      state.playerShots = state.playerShots.filter(shot => shot.x > -40 && shot.x < canvasWidth + 40);
     }
 
     function updateEnemyShots() {
@@ -966,30 +1069,32 @@
       state.playerShots.forEach(shot => {
         state.enemies.forEach(enemy => {
           if (!enemy.alive) return;
-          const enemyBox = {x: enemy.x, y: enemy.y, width: enemy.width, height: enemy.height};
-          if (pointCircleCollide(shot.x, shot.y, {x: enemyBox.x + enemyBox.width/2, y: enemyBox.y + enemyBox.height/2, radius: enemy.width/2})) {
+          const ecx = enemy.x + enemy.width / 2, ecy = enemy.y + enemy.height / 2;
+          const rr = Math.max(enemy.width, enemy.height) / 2 + (shot.radius || 4);
+          if ((shot.x - ecx) ** 2 + (shot.y - ecy) ** 2 <= rr * rr) {
             enemy.hp -= shot.damage;
             enemy.blink = 6;
-            shot.x = canvasWidth + 100;
             playEnemyHitSound();
-            spawnParticles(shot.x - 10, shot.y, 6, { color: ['#ffd86a', '#ffffff'], speedMin: 1, speedMax: 3, gravity: 0.1, life: 16, size: 2 });
+            spawnParticles(shot.x, shot.y, shot.charged ? 12 : 6, { color: ['#ffd86a', '#ffffff'], speedMin: 1, speedMax: shot.charged ? 5 : 3, gravity: 0.1, life: 16, size: 2 });
+            if (!shot.charged) shot.x = canvasWidth + 200; // 普通弹命中即消失；蓄力弹穿透杂兵
             if (enemy.hp <= 0) {
               enemy.alive = false;
               state.score += 5;
               scoreEl.textContent = state.score;
               state.speed = Math.min(2.4, state.speed + 0.08);
               speedEl.textContent = state.speed.toFixed(1);
-              spawnParticles(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 18, {
-                color: enemy.type === 'green' ? ['#5edc5e', '#ffffff'] : ['#ff6c6c', '#ffffff'],
-                speedMin: 1.5, speedMax: 4.5, gravity: 0.18, life: 26, size: 3
-              });
+              const col = enemy.type === 'green' ? ['#5edc5e', '#ffffff']
+                : enemy.type === 'red' ? ['#ff6c6c', '#ffffff']
+                : enemy.type === 'flyer' ? ['#c17cff', '#ffffff']
+                : ['#ff9a3c', '#ffffff'];
+              spawnParticles(ecx, ecy, 18, { color: col, speedMin: 1.5, speedMax: 4.5, gravity: 0.18, life: 26, size: 3 });
               if (state.score >= 55 && !state.boss) spawnBoss();
             }
           }
         });
         if (state.boss) {
           const bossBox = {x: state.boss.x, y: state.boss.y, width: state.boss.width, height: state.boss.height};
-          if (pointCircleCollide(shot.x, shot.y, {x: bossBox.x + bossBox.width/2, y: bossBox.y + bossBox.height/2, radius: bossBox.width/2})) {
+          if (pointCircleCollide(shot.x, shot.y, {x: bossBox.x + bossBox.width/2, y: bossBox.y + bossBox.height/2, radius: bossBox.width/2 + (shot.radius || 4)})) {
             state.boss.hp -= shot.damage;
             state.boss.hitTimer = 12;
             for (let i = 0; i < 14; i++) {
@@ -1231,9 +1336,12 @@
       ctx.save();
       // 屏幕震动
       if (state.shakeTimer && state.shakeTimer > 0) {
-        const st = state.shakeStrength || 6;
-        ctx.translate((Math.random() - 0.5) * st, (Math.random() - 0.5) * st * 0.8);
+        // 随时间衰减的抖动，位移加大，落地/命中更有冲击感
+        const decay = state.shakeBase ? state.shakeTimer / state.shakeBase : 1;
+        const st = (state.shakeStrength || 6) * decay;
+        ctx.translate((Math.random() - 0.5) * st * 2, (Math.random() - 0.5) * st * 1.6);
         state.shakeTimer -= 1;
+        if (state.shakeTimer <= 0) { state.shakeStrength = 0; state.shakeBase = 0; }
       }
 
       ctx.clearRect(0, 0, canvasWidth, canvasHeight);
@@ -1263,24 +1371,43 @@
       // 玩家子弹
       state.playerShots.forEach(shot => {
         if (shot.charged) {
+          const t = shot.spin || 0;
           ctx.save();
-          ctx.shadowBlur = 18;
+          ctx.shadowBlur = 30;
           ctx.shadowColor = '#8df4ff';
-          ctx.fillStyle = 'rgba(122, 255, 255, 0.85)';
+          // 外层放射光晕
+          const grd = ctx.createRadialGradient(shot.x, shot.y, 0, shot.x, shot.y, shot.radius * 1.7);
+          grd.addColorStop(0, 'rgba(255,255,255,0.98)');
+          grd.addColorStop(0.4, 'rgba(122,255,255,0.8)');
+          grd.addColorStop(1, 'rgba(80,200,255,0)');
+          ctx.fillStyle = grd;
           ctx.beginPath();
-          ctx.arc(shot.x, shot.y, shot.radius * 1.8, 0, Math.PI * 2);
+          ctx.arc(shot.x, shot.y, shot.radius * 1.7, 0, Math.PI * 2);
+          ctx.fill();
+          // 旋转能量环（两道十字椭圆）
+          ctx.strokeStyle = 'rgba(180,255,255,0.95)';
+          ctx.lineWidth = 3;
+          for (let k = 0; k < 2; k++) {
+            ctx.beginPath();
+            ctx.ellipse(shot.x, shot.y, shot.radius, shot.radius * 0.45, t + k * Math.PI / 2, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+          // 高亮核心
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(shot.x, shot.y, shot.radius * 0.5, 0, Math.PI * 2);
           ctx.fill();
           ctx.restore();
-          ctx.strokeStyle = '#8efbff';
-          ctx.lineWidth = 2;
+        } else {
+          ctx.save();
+          ctx.shadowBlur = 8;
+          ctx.shadowColor = shot.color || '#7cff9b';
+          ctx.fillStyle = shot.color || '#7cff9b';
           ctx.beginPath();
-          ctx.arc(shot.x, shot.y, shot.radius + 6, 0, Math.PI * 2);
-          ctx.stroke();
+          ctx.arc(shot.x, shot.y, shot.radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
         }
-        ctx.fillStyle = shot.color || '#7cff9b';
-        ctx.beginPath();
-        ctx.arc(shot.x, shot.y, shot.radius, 0, Math.PI * 2);
-        ctx.fill();
       });
 
       // 敌人子弹
@@ -1298,16 +1425,64 @@
       // 敌人
       state.enemies.forEach(enemy => {
         const flash = enemy.blink > 0;
-        ctx.fillStyle = flash ? '#ffffff' : (enemy.type === 'green' ? '#5edc5e' : '#ff6c6c');
-        ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
-        ctx.fillStyle = '#242424';
-        ctx.fillRect(enemy.x + 10, enemy.y + 14, enemy.width - 20, 10);
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(enemy.x + 12, enemy.y + 10, 8, 8);
-        ctx.fillRect(enemy.x + enemy.width - 20, enemy.y + 10, 8, 8);
-        if (enemy.type === 'red') {
-          ctx.fillStyle = '#ffb1b1';
-          ctx.fillRect(enemy.x + 14, enemy.y + enemy.height - 18, 18, 8);
+        if (enemy.type === 'flyer') {
+          // 飞行怪：紫色圆身 + 拍动的三角翅膀
+          const wf = Math.sin(Date.now() * 0.03) * 6;
+          ctx.fillStyle = flash ? '#ffffff' : '#e0b3ff';
+          ctx.beginPath();
+          ctx.moveTo(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+          ctx.lineTo(enemy.x - 8, enemy.y + wf);
+          ctx.lineTo(enemy.x - 8, enemy.y + enemy.height - wf);
+          ctx.closePath(); ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+          ctx.lineTo(enemy.x + enemy.width + 8, enemy.y + wf);
+          ctx.lineTo(enemy.x + enemy.width + 8, enemy.y + enemy.height - wf);
+          ctx.closePath(); ctx.fill();
+          ctx.save();
+          ctx.shadowBlur = 12; ctx.shadowColor = '#c17cff';
+          ctx.fillStyle = flash ? '#ffffff' : '#b45cff';
+          ctx.beginPath();
+          ctx.arc(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, enemy.width / 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+          ctx.fillStyle = '#2a0a3a';
+          ctx.fillRect(enemy.x + enemy.width / 2 - 7, enemy.y + enemy.height / 2 - 3, 4, 5);
+          ctx.fillRect(enemy.x + enemy.width / 2 + 3, enemy.y + enemy.height / 2 - 3, 4, 5);
+        } else if (enemy.type === 'charger') {
+          // 冲刺怪：橙色尖锐箭头 + 速度线
+          ctx.save();
+          ctx.shadowBlur = 10; ctx.shadowColor = '#ff9a3c';
+          ctx.fillStyle = flash ? '#ffffff' : '#ff9a3c';
+          ctx.beginPath();
+          ctx.moveTo(enemy.x, enemy.y);
+          ctx.lineTo(enemy.x + enemy.width, enemy.y + enemy.height / 2);
+          ctx.lineTo(enemy.x, enemy.y + enemy.height);
+          ctx.closePath(); ctx.fill();
+          ctx.restore();
+          ctx.fillStyle = '#5a2a00';
+          ctx.fillRect(enemy.x + 6, enemy.y + enemy.height / 2 - 4, 8, 4);
+          ctx.strokeStyle = 'rgba(255,180,100,0.6)';
+          ctx.lineWidth = 2;
+          for (let k = 1; k <= 3; k++) {
+            ctx.beginPath();
+            ctx.moveTo(enemy.x + enemy.width + k * 6, enemy.y + enemy.height / 2 - 6);
+            ctx.lineTo(enemy.x + enemy.width + k * 11, enemy.y + enemy.height / 2 - 6);
+            ctx.stroke();
+          }
+        } else {
+          // 普通绿/红怪
+          ctx.fillStyle = flash ? '#ffffff' : (enemy.type === 'green' ? '#5edc5e' : '#ff6c6c');
+          ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+          ctx.fillStyle = '#242424';
+          ctx.fillRect(enemy.x + 10, enemy.y + 14, enemy.width - 20, 10);
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(enemy.x + 12, enemy.y + 10, 8, 8);
+          ctx.fillRect(enemy.x + enemy.width - 20, enemy.y + 10, 8, 8);
+          if (enemy.type === 'red') {
+            ctx.fillStyle = '#ffb1b1';
+            ctx.fillRect(enemy.x + 14, enemy.y + enemy.height - 18, 18, 8);
+          }
         }
       });
 
@@ -1389,32 +1564,49 @@
         }
       }
 
-      // 蓄力光效
+      // 蓄力特效：聚能光环 + 核心光球（取代旧的进度条）
       if (player.charging && state.stage === 2) {
-        const chargeRatio = Math.min(1, player.chargeTime / 55);
-        const chargeWidth = chargeRatio * 120;
+        const ratio = Math.min(1, player.chargeTime / 55);
+        const dir = player.direction === 'left' ? -1 : 1;
+        const ox = player.x + player.width / 2 + dir * (player.width / 2 + 6);
+        const oy = player.y + 24;
+        const t = Date.now() * 0.02;
         ctx.save();
-        ctx.shadowBlur = 24;
-        ctx.shadowColor = 'rgba(110, 230, 255, 0.9)';
-        ctx.fillStyle = `rgba(40, 200, 255, ${0.45 + chargeRatio * 0.3})`;
-        ctx.fillRect(player.x - 10, player.y - 18, chargeWidth, 10);
-        ctx.restore();
-        ctx.strokeStyle = '#8df4ff';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(player.x - 10, player.y - 18, 120, 10);
-        const text = player.chargeReady ? '蓄力完成' : '蓄力中';
-        ctx.fillStyle = player.chargeReady ? '#ffd86a' : '#e0f8ff';
-        ctx.font = '14px Arial';
-        ctx.fillText(text, player.x - 10, player.y - 24);
-        if (player.chargeReady) {
-          ctx.save();
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
-          ctx.lineWidth = 1;
+        // 向内聚拢的旋转粒子
+        for (let i = 0; i < 10; i++) {
+          const ang = t + i * (Math.PI * 2 / 10);
+          const rad = (1 - ratio) * 24 + 9 + Math.sin(t * 2 + i) * 2;
+          const px = ox + Math.cos(ang) * rad;
+          const py = oy + Math.sin(ang) * rad;
+          ctx.globalAlpha = 0.4 + ratio * 0.5;
+          ctx.fillStyle = ratio >= 1 ? '#ffe07a' : '#8df4ff';
           ctx.beginPath();
-          ctx.arc(player.x + player.width / 2, player.y + 4, 18 + Math.sin(Date.now() * 0.02) * 2, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.restore();
+          ctx.arc(px, py, 2 + ratio * 1.6, 0, Math.PI * 2);
+          ctx.fill();
         }
+        ctx.globalAlpha = 1;
+        // 核心光球
+        const coreR = 4 + ratio * 13;
+        ctx.shadowBlur = 20 + ratio * 24;
+        ctx.shadowColor = ratio >= 1 ? '#ffd86a' : '#4fe3ff';
+        const grd = ctx.createRadialGradient(ox, oy, 0, ox, oy, coreR);
+        grd.addColorStop(0, '#ffffff');
+        grd.addColorStop(0.5, ratio >= 1 ? '#ffe07a' : '#8df4ff');
+        grd.addColorStop(1, 'rgba(80,200,255,0)');
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(ox, oy, coreR, 0, Math.PI * 2);
+        ctx.fill();
+        // 蓄满脉冲环
+        if (ratio >= 1) {
+          const pulse = (Math.sin(Date.now() * 0.02) + 1) / 2;
+          ctx.strokeStyle = `rgba(255,224,122,${0.85 - pulse * 0.5})`;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(ox, oy, coreR + 6 + pulse * 12, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
       }
 
       // 通用粒子（尘土/命中/爆裂）
@@ -1461,7 +1653,7 @@
             state.spawnTimer = state.spawnInterval;
           }
           state.spawnTimer -= 1 + state.speed * 0.2;
-          state.speed = Math.min(2.4, state.speed + 0.0005);
+          state.speed = Math.min(3.2, state.speed + 0.0012);
           speedEl.textContent = state.speed.toFixed(1);
         }
       }
@@ -1469,7 +1661,8 @@
       if (state.stage === 2 && !state.boss) {
         if (state.spawnTimer <= 0) {
           spawnEnemy();
-          state.spawnTimer = 140 - Math.min(40, state.speed * 12);
+          if (Math.random() < 0.35) spawnEnemy(); // 偶尔成组来袭，提升压迫感
+          state.spawnTimer = 105 - Math.min(45, state.speed * 14);
         }
         state.spawnTimer -= 1 + state.speed * 0.15;
       }
@@ -1507,7 +1700,7 @@
     window.addEventListener('keydown', event => {
       const code = event.code;
       if (audioCtx.state === 'suspended') audioCtx.resume();
-      if (code === 'Space') {
+      if (code === 'Space' || code === 'KeyW') {
         if (state.active && !event.repeat) {
           player.jumpBuffer = player.jumpBufferMax;
           player.jumpHeld = true;
@@ -1531,7 +1724,7 @@
 
     window.addEventListener('keyup', event => {
       const code = event.code;
-      if (code === 'Space') {
+      if (code === 'Space' || code === 'KeyW') {
         state.keys.Space = false;
         player.jumpHeld = false;
       }
