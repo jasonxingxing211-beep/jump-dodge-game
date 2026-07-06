@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>跳跃躲避障碍物</title>
   <style>
     body {
@@ -111,6 +111,49 @@
       line-height: 1.6;
       max-width: 620px;
     }
+
+    /* ===== 移动端触摸控制 ===== */
+    html, body { overscroll-behavior: none; }
+    canvas { touch-action: none; }
+
+    #touchControls {
+      display: none;
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding: 14px 16px;
+      box-sizing: border-box;
+      pointer-events: none;
+      z-index: 15;
+    }
+    #touchControls .pad { display: flex; gap: 14px; align-items: flex-end; }
+    #touchControls .btn {
+      pointer-events: auto;
+      width: 62px; height: 62px;
+      border-radius: 50%;
+      border: 2px solid rgba(126,240,255,0.55);
+      background: rgba(20,30,60,0.42);
+      color: #cdefff;
+      font-size: 24px;
+      display: flex; align-items: center; justify-content: center;
+      user-select: none; -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: none;
+      transition: transform 0.06s, background 0.06s;
+    }
+    #touchControls .btn.active { background: rgba(80,200,255,0.55); transform: scale(0.92); }
+    #touchControls .btn.jump { width: 74px; height: 74px; font-size: 28px; border-color: rgba(140,255,180,0.6); }
+    #touchControls .btn.shoot { border-color: rgba(255,224,122,0.7); color: #ffe89a; }
+
+    @media (max-width: 700px) {
+      body { align-items: flex-start; }
+      #gameContainer { border-width: 0; border-radius: 0; }
+      #hud div { font-size: 13px; }
+      #instructions { font-size: 12px; }
+      #touchControls .btn { width: 56px; height: 56px; font-size: 22px; }
+      #touchControls .btn.jump { width: 66px; height: 66px; }
+    }
   </style>
 </head>
 <body>
@@ -120,6 +163,7 @@
       <div>关卡: <span id="stage">1</span></div>
       <div>得分: <span id="score">0</span></div>
       <div>最高分: <span id="bestScore">0</span></div>
+      <div>护盾: <span id="shield">有</span></div>
       <div>速度: <span id="speed">1.0</span></div>
     </div>
     <div id="watermark">sjx制作</div>
@@ -128,7 +172,18 @@
       <div id="messageText">按空格开始游戏</div>
       <button id="restartButton">继续</button>
       <div id="instructions">
-        控制：A/D 左右移动，W/空格 跳跃，S 下蹲。躲避障碍与天降坠落物，冲向闪光大门！
+        电脑：A/D 移动，W/空格 跳跃，S 下蹲，J 蓄力射击（第二关）。<br>手机：使用屏幕左下移动、右下跳跃/下蹲/射击。
+      </div>
+    </div>
+    <div id="touchControls">
+      <div class="pad left">
+        <button class="btn" id="btnLeft">◀</button>
+        <button class="btn" id="btnRight">▶</button>
+      </div>
+      <div class="pad right">
+        <button class="btn shoot" id="btnShoot">✦</button>
+        <button class="btn" id="btnCrouch">▼</button>
+        <button class="btn jump" id="btnJump">▲</button>
       </div>
     </div>
   </div>
@@ -175,6 +230,8 @@
       jumpCount: 0,
       maxJumps: 1,
       crouching: false,
+      shield: true,
+      invuln: 0,
       direction: 'right',
       shootCooldown: 0,
       charging: false,
@@ -461,6 +518,9 @@
       player.shootCooldown = 0;
       player.charging = false;
       player.chargeTime = 0;
+      player.shield = true;
+      player.invuln = 0;
+      document.getElementById('shield').textContent = '有';
       resetPlayerFeel();
       scoreEl.textContent = state.score;
       speedEl.textContent = state.speed.toFixed(1);
@@ -535,6 +595,36 @@
       drawScene();
       showMessage(text, '重新开始', 'end');
       playFailSound();
+    }
+
+    function playShieldBreakSound() {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(680, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(150, audioCtx.currentTime + 0.25);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.22, audioCtx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.28);
+      osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+    }
+
+    // 受到致命伤害：有护盾则抵挡一次（破盾 + 短暂无敌），否则结束游戏
+    function takeDamage(reason) {
+      if (player.invuln > 0) return;
+      if (player.shield) {
+        player.shield = false;
+        player.invuln = 70;
+        document.getElementById('shield').textContent = '无';
+        playShieldBreakSound();
+        addShake(6, 10);
+        spawnParticles(player.x + player.width / 2, player.y + player.height / 2, 26, {
+          color: ['#7ef0ff', '#ffffff', '#b6fff0'], speedMin: 2, speedMax: 5.5, gravity: 0.05, life: 28, size: 3
+        });
+        return;
+      }
+      endGame(reason);
     }
 
     function winGame() {
@@ -801,6 +891,7 @@
     /* ============================ 更新 ============================ */
     function updatePlayer() {
       if (player.jumpBuffer > 0) player.jumpBuffer -= 1;
+      if (player.invuln > 0) player.invuln -= 1;
       if (player.coyoteTimer > 0) player.coyoteTimer -= 1;
 
       // 可变重力：上升松手减速快（短跳），下落更干脆（更好的平台手感）
@@ -923,9 +1014,9 @@
       state.fallingObjects.forEach(o => {
         if (o.phase === 'warn') {
           o.timer -= 1;
-          if (o.timer <= 0) { o.phase = 'fall'; o.vy = 7; o.y = -44; }
+          if (o.timer <= 0) { o.phase = 'fall'; o.vy = 3.5; o.y = -44; }
         } else if (o.phase === 'fall') {
-          o.vy += 0.9;
+          o.vy += 0.4;
           o.y += o.vy;
           if (o.y + o.height >= canvasHeight - groundHeight) {
             o.phase = 'done';
@@ -1194,19 +1285,24 @@
       const ph = player.crouching ? player.height * 0.5 : player.height;
       const playerBox = {x: player.x + 6, y: player.y + (player.height - ph) + 8, width: player.width - 12, height: ph - 12};
 
+      // 无敌期（破盾后短暂）忽略一切致命碰撞
+      const canDie = player.invuln <= 0;
+
       if (state.stage === 1) {
-        for (const obs of state.obstacles) {
-          if (rectOverlap(playerBox, obs)) {
-            endGame('游戏失败！被障碍物撞到了');
-            return;
-          }
-        }
-        for (const o of state.fallingObjects) {
-          if (o.phase === 'fall') {
-            const box = {x: o.x, y: o.y, width: o.width, height: o.height};
-            if (rectOverlap(playerBox, box)) {
-              endGame('游戏失败！被坠落物砸中');
+        if (canDie) {
+          for (const obs of state.obstacles) {
+            if (rectOverlap(playerBox, obs)) {
+              takeDamage('游戏失败！被障碍物撞到了');
               return;
+            }
+          }
+          for (const o of state.fallingObjects) {
+            if (o.phase === 'fall') {
+              const box = {x: o.x, y: o.y, width: o.width, height: o.height};
+              if (rectOverlap(playerBox, box)) {
+                takeDamage('游戏失败！被坠落物砸中');
+                return;
+              }
             }
           }
         }
@@ -1225,23 +1321,25 @@
         }
       }
 
-      if (state.stage === 2) {
+      if (state.stage === 2 && canDie) {
         for (const enemy of state.enemies) {
           if (rectOverlap(playerBox, enemy)) {
-            endGame('游戏失败！被小怪碰到');
+            takeDamage('游戏失败！被小怪碰到');
             return;
           }
         }
         if (state.boss && rectOverlap(playerBox, state.boss)) {
-          endGame('游戏失败！被 Boss 撞到了');
+          takeDamage('游戏失败！被 Boss 撞到了');
           return;
         }
       }
 
-      for (const shot of state.enemyShots) {
-        if (pointCircleCollide(player.x + player.width/2, player.y + 20, shot)) {
-          endGame('游戏失败！被敌人攻击命中');
-          return;
+      if (canDie) {
+        for (const shot of state.enemyShots) {
+          if (pointCircleCollide(player.x + player.width/2, player.y + 20, shot)) {
+            takeDamage('游戏失败！被敌人攻击命中');
+            return;
+          }
         }
       }
 
@@ -1896,6 +1994,29 @@
       // 玩家
       drawPlayer();
 
+      // 护盾光环（拥有护盾或破盾后无敌期显示）
+      if (player.shield || player.invuln > 0) {
+        const pcx = player.x + player.width / 2;
+        const pcy = player.y + player.height / 2;
+        const rt = Date.now() * 0.005;
+        ctx.save();
+        ctx.globalAlpha = player.shield ? 0.55 : 0.28;
+        ctx.strokeStyle = '#7ef0ff';
+        ctx.lineWidth = 2.5;
+        ctx.shadowBlur = 14; ctx.shadowColor = '#7ef0ff';
+        ctx.beginPath();
+        ctx.ellipse(pcx, pcy, player.width * 0.92, player.height * 0.62, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        for (let i = 0; i < 3; i++) {
+          const a = rt + i * (Math.PI * 2 / 3);
+          ctx.fillStyle = 'rgba(180,250,255,0.85)';
+          ctx.beginPath();
+          ctx.arc(pcx + Math.cos(a) * player.width * 0.92, pcy + Math.sin(a) * player.height * 0.62, 2.6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
       // 暂停/结束时压暗
       if (!state.active) {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
@@ -2041,6 +2162,56 @@
         startLoop();
       }
     });
+
+    /* ===== 触摸控制映射（手机） ===== */
+    function pressKey(code) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      if (code === 'Space') {
+        if (state.active) { player.jumpBuffer = player.jumpBufferMax; player.jumpHeld = true; }
+        state.keys.Space = true;
+        if (!state.active && state.messageMode !== 'end') { hideMessage(); startLoop(); }
+        else if (!state.active && state.messageMode === 'end') { resetGame(); }
+      } else if (code === 'KeyJ') {
+        state.keys.KeyJ = true;
+      } else if (code in state.keys) {
+        state.keys[code] = true;
+      }
+    }
+    function releaseKey(code) {
+      if (code === 'Space') {
+        state.keys.Space = false;
+        player.jumpHeld = false;
+      } else if (code === 'KeyJ') {
+        if (state.stage === 2 && player.charging && player.shootCooldown <= 0 && state.active) {
+          const charged = player.chargeReady;
+          firePlayerShot(charged ? 3 : 1, charged);
+        }
+        player.charging = false; player.chargeTime = 0; player.chargeReady = false;
+        state.keys.KeyJ = false;
+      } else if (code in state.keys) {
+        state.keys[code] = false;
+      }
+    }
+    function bindTouchButton(id, code) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const down = e => { e.preventDefault(); pressKey(code); el.classList.add('active'); };
+      const up = e => { e.preventDefault(); releaseKey(code); el.classList.remove('active'); };
+      el.addEventListener('touchstart', down, { passive: false });
+      el.addEventListener('touchend', up, { passive: false });
+      el.addEventListener('touchcancel', up, { passive: false });
+      el.addEventListener('mousedown', down);
+      el.addEventListener('mouseup', up);
+      el.addEventListener('mouseleave', up);
+    }
+    bindTouchButton('btnLeft', 'KeyA');
+    bindTouchButton('btnRight', 'KeyD');
+    bindTouchButton('btnJump', 'Space');
+    bindTouchButton('btnCrouch', 'KeyS');
+    bindTouchButton('btnShoot', 'KeyJ');
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+      document.getElementById('touchControls').style.display = 'flex';
+    }
 
     initBackground();
     resetGame();
