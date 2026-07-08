@@ -39,23 +39,61 @@
 
     #hud {
       display: flex;
-      justify-content: space-between;
+      justify-content: center;
       align-items: center;
-      padding: 12px 18px;
-      gap: 12px;
+      padding: 10px 14px;
+      gap: 8px;
       flex-wrap: wrap;
-      background: rgba(12, 16, 30, 0.96);
-      border-bottom: 1px solid rgba(255,255,255,0.08);
+      background: linear-gradient(180deg, rgba(14,18,34,0.98), rgba(14,18,34,0.82));
+      border-bottom: 1px solid rgba(126,240,255,0.18);
     }
-
-    #hud div {
-      font-size: 16px;
+    #hud .stat {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 12px;
+      font-size: 14px;
       white-space: nowrap;
+      color: #c9d6f5;
+      background: rgba(34,46,80,0.55);
+      border: 1px solid rgba(126,240,255,0.22);
+      border-radius: 20px;
+      box-shadow: inset 0 0 10px rgba(80,160,255,0.08);
     }
-
-    #hud span {
+    #hud .stat .ic { font-size: 15px; filter: drop-shadow(0 0 4px rgba(120,240,255,0.5)); }
+    #hud .stat span {
       color: #7fe9ff;
       font-weight: bold;
+      text-shadow: 0 0 8px rgba(120,240,255,0.55);
+    }
+    #hud #shield.on { color: #6dffb0; text-shadow: 0 0 8px rgba(109,255,176,0.6); }
+    #hud #shield.off { color: #7a869e; text-shadow: none; }
+
+    /* 第一关进度条（满分 55） */
+    #progress {
+      position: relative;
+      height: 16px;
+      background: rgba(18,26,48,0.92);
+      border-bottom: 1px solid rgba(126,240,255,0.15);
+      overflow: hidden;
+    }
+    #progressFill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #2478b8, #8df4ff);
+      box-shadow: 0 0 12px rgba(120,240,255,0.6);
+      transition: width 0.25s ease;
+    }
+    #progress span {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: #eafaff;
+      letter-spacing: 0.12em;
+      text-shadow: 0 0 4px rgba(0,0,0,0.8);
     }
 
     /* 开场片头：景星出品（全屏固定，覆盖加载过程，避免抖动） */
@@ -149,7 +187,7 @@
       display: none;
       position: absolute;
       left: 0; right: 0; bottom: 0;
-      justify-content: space-between;
+      justify-content: flex-end;
       align-items: flex-end;
       padding: 12px 16px 30px;
       box-sizing: border-box;
@@ -157,8 +195,32 @@
       z-index: 15;
     }
     #touchControls .pad { display: flex; align-items: flex-end; }
-    #touchControls .pad.left { gap: 6px; }   /* 方向键紧邻，滑动即可切换，无空档 */
     #touchControls .pad.right { gap: 16px; }
+
+    /* 左侧虚拟摇杆（控制左右移动） */
+    #joystick {
+      position: fixed;
+      z-index: 16;
+      pointer-events: none;
+      display: none;
+    }
+    #joystick .jbase {
+      position: absolute;
+      width: 118px; height: 118px;
+      border-radius: 50%;
+      border: 2px solid rgba(126,240,255,0.45);
+      background: rgba(20,30,60,0.32);
+      box-shadow: 0 0 20px rgba(120,240,255,0.18) inset;
+      transform: translate(-50%, -50%);
+    }
+    #joystick .jknob {
+      position: absolute;
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      background: rgba(90,210,255,0.6);
+      box-shadow: 0 0 18px rgba(120,240,255,0.65);
+      transform: translate(-50%, -50%);
+    }
     #touchControls .btn {
       pointer-events: auto;
       width: 86px; height: 86px;
@@ -232,13 +294,13 @@
   <div id="splash"><div class="brand">景星出品</div><div class="line"></div></div>
   <div id="gameContainer">
     <div id="hud">
-      <div>玩家: 55</div>
-      <div>关卡: <span id="stage">1</span></div>
-      <div>得分: <span id="score">0</span></div>
-      <div>最高分: <span id="bestScore">0</span></div>
-      <div>护盾: <span id="shield">有</span></div>
-      <div>速度: <span id="speed">1.0</span></div>
+      <div class="stat"><span class="ic">🗺️</span>关卡 <span id="stage">1</span></div>
+      <div class="stat"><span class="ic">⭐</span>得分 <span id="score">0</span></div>
+      <div class="stat"><span class="ic">🏆</span>最高 <span id="bestScore">0</span></div>
+      <div class="stat"><span class="ic">🛡️</span><span id="shield" class="on">有</span></div>
+      <div class="stat"><span class="ic">⚡</span><span id="speed">1.0</span></div>
     </div>
+    <div id="progress"><div id="progressFill"></div><span id="progressText">0 / 55</span></div>
     <canvas id="gameCanvas" width="900" height="450"></canvas>
     <div id="message">
       <div id="messageText">按空格开始游戏</div>
@@ -248,16 +310,13 @@
       </div>
     </div>
     <div id="touchControls">
-      <div class="pad left">
-        <button class="btn" id="btnLeft">◀</button>
-        <button class="btn" id="btnRight">▶</button>
-      </div>
       <div class="pad right">
         <button class="btn shoot" id="btnShoot">✦</button>
         <button class="btn" id="btnCrouch">▼</button>
         <button class="btn jump" id="btnJump">▲</button>
       </div>
     </div>
+    <div id="joystick"><div class="jbase"></div><div class="jknob"></div></div>
   </div>
 
   <div id="rotateHint">
@@ -355,6 +414,8 @@
       doorFlashTimer: 0,
       hintText: '',
       bossMusic: null,
+      stageMusic: null,
+      stage2Music: null,
       active: false,
       bestScore: Number(localStorage.getItem('jumpDodgeBestScore') || 0),
       shakeTimer: 0,
@@ -374,108 +435,97 @@
     };
 
     /* ============================ 音效 ============================ */
-    function playTone(freq, type = 'sine', duration = 0.1) {
+    // ===== 音效系统：柔和悦耳（主音量 + 低通滤波 + 平滑包络） =====
+    const masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.5;
+    masterGain.connect(audioCtx.destination);
+
+    function tone(opts) {
+      const {
+        freq = 440, type = 'sine', dur = 0.15, vol = 0.15,
+        attack = 0.008, cutoff = 2400, resonance = 0.6,
+        slideTo = null, slideTime = null, delay = 0
+      } = opts;
+      const t0 = audioCtx.currentTime + delay;
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
+      const filt = audioCtx.createBiquadFilter();
+      filt.type = 'lowpass';
+      filt.frequency.value = cutoff;
+      filt.Q.value = resonance;
       osc.type = type;
-      osc.frequency.value = freq;
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.18, audioCtx.currentTime + 0.02);
-      osc.start();
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-      osc.stop(audioCtx.currentTime + duration + 0.02);
+      osc.frequency.setValueAtTime(freq, t0);
+      if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, t0 + (slideTime || dur));
+      osc.connect(filt); filt.connect(gain); gain.connect(opts.dest || masterGain);
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.linearRampToValueAtTime(vol, t0 + attack);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      osc.start(t0);
+      osc.stop(t0 + dur + 0.05);
+    }
+    function chord(freqs, opts = {}) { freqs.forEach(f => tone({ ...opts, freq: f })); }
+    function arp(freqs, opts = {}) {
+      const step = opts.step || 0.08;
+      freqs.forEach((f, i) => tone({ ...opts, freq: f, delay: (opts.delay || 0) + i * step }));
+    }
+    // 兼容旧的直接调用
+    function playTone(freq, type = 'sine', duration = 0.12) {
+      tone({ freq, type, dur: duration, vol: 0.14, cutoff: 2200 });
     }
 
-    function playJumpSound() { playTone(520, 'triangle', 0.12); }
-    function playDoubleJumpSound() { playTone(680, 'triangle', 0.12); }
-    function playLandSound(impact = 0.5) {
-      // 厚重的落地"咚"：低频下滑 + 冲击越大越响越低
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'sine';
-      const f = 190 + impact * 40;
-      osc.frequency.setValueAtTime(f, audioCtx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(55, audioCtx.currentTime + 0.13);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      const vol = 0.12 + impact * 0.22;
-      gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(vol, audioCtx.currentTime + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.22);
-      // 冲击较大时叠一层短促噪声"啪"，增加打击感
-      if (impact > 0.45) playTone(90, 'triangle', 0.05);
+    function playJumpSound() {
+      tone({ freq: 380, slideTo: 620, type: 'sine', dur: 0.18, vol: 0.16, cutoff: 1800 });
+      tone({ freq: 570, slideTo: 930, type: 'sine', dur: 0.15, vol: 0.05, cutoff: 2200 });
     }
-    function playShootSound() { playTone(760, 'square', 0.06); }
+    function playDoubleJumpSound() {
+      tone({ freq: 520, slideTo: 880, type: 'sine', dur: 0.18, vol: 0.16, cutoff: 2000 });
+      tone({ freq: 780, slideTo: 1320, type: 'sine', dur: 0.14, vol: 0.045, cutoff: 2400 });
+    }
+    function playLandSound(impact = 0.5) {
+      // 柔和低频"咚"
+      tone({ freq: 180 + impact * 40, slideTo: 60, type: 'sine', dur: 0.2, vol: 0.14 + impact * 0.16, cutoff: 800 });
+    }
+    function playShootSound() {
+      // 柔和 pew
+      tone({ freq: 820, slideTo: 460, type: 'triangle', dur: 0.1, vol: 0.09, cutoff: 1500 });
+    }
     function playChargeSound() {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      const filter = audioCtx.createBiquadFilter();
-      osc.type = 'triangle';
-      osc.frequency.value = 320;
-      filter.type = 'lowpass';
-      filter.frequency.value = 660;
-      osc.connect(filter);
-      filter.connect(gain);
-      gain.connect(audioCtx.destination);
-      gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.16, audioCtx.currentTime + 0.08);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.32);
+      // 上行嗡鸣，缓入
+      tone({ freq: 260, slideTo: 520, type: 'sine', dur: 0.35, vol: 0.12, cutoff: 1000, attack: 0.1 });
     }
     function playChargeReleaseSound() {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(220, audioCtx.currentTime + 0.18);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.22, audioCtx.currentTime + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.22);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.24);
+      // 释放：饱满下扫和声
+      tone({ freq: 720, slideTo: 300, type: 'triangle', dur: 0.22, vol: 0.15, cutoff: 1800 });
+      tone({ freq: 480, slideTo: 200, type: 'sine', dur: 0.24, vol: 0.09, cutoff: 1400 });
     }
-    function playEnemyHitSound() { playTone(260, 'triangle', 0.08); }
-    function playBossHitSound() { playTone(180, 'square', 0.1); }
+    function playEnemyHitSound() {
+      // 清脆"叮"
+      tone({ freq: 880, type: 'sine', dur: 0.1, vol: 0.12, cutoff: 3200 });
+      tone({ freq: 1320, type: 'sine', dur: 0.07, vol: 0.045, cutoff: 3600 });
+    }
+    function playBossHitSound() {
+      tone({ freq: 300, slideTo: 200, type: 'triangle', dur: 0.12, vol: 0.14, cutoff: 1200 });
+    }
     function playDoorMusic() {
-      const osc1 = audioCtx.createOscillator();
-      const osc2 = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc1.type = 'triangle';
-      osc2.type = 'sine';
-      osc1.frequency.value = 520;
-      osc2.frequency.value = 660;
-      osc1.connect(gain);
-      osc2.connect(gain);
-      gain.connect(audioCtx.destination);
-      gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.18, audioCtx.currentTime + 0.02);
-      osc1.start();
-      osc2.start();
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.7);
-      osc1.stop(audioCtx.currentTime + 0.7);
-      osc2.stop(audioCtx.currentTime + 0.7);
+      // 悦耳上行琶音（C 大三和弦）
+      arp([523, 659, 784, 1047], { type: 'sine', dur: 0.3, vol: 0.13, cutoff: 2800, step: 0.09 });
     }
-    function playFailSound() { playTone(140, 'sawtooth', 0.22); }
-    function playWinSound() { playTone(880, 'triangle', 0.18); }
+    function playFailSound() {
+      // 低沉柔和下行，不刺耳
+      tone({ freq: 300, slideTo: 150, type: 'sine', dur: 0.5, vol: 0.16, cutoff: 900 });
+      tone({ freq: 360, slideTo: 180, type: 'sine', dur: 0.5, vol: 0.08, cutoff: 900, delay: 0.02 });
+    }
+    function playWinSound() {
+      // 胜利上行琶音（大调）
+      arp([523, 659, 784, 1047, 1319], { type: 'sine', dur: 0.35, vol: 0.15, cutoff: 3200, step: 0.1 });
+    }
     function playIntroWhoosh() {
-      const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(180, audioCtx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(900, audioCtx.currentTime + 0.4);
-      osc.connect(g); g.connect(audioCtx.destination);
-      g.gain.setValueAtTime(0.001, audioCtx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.16, audioCtx.currentTime + 0.05);
-      g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.45);
-      osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+      tone({ freq: 200, slideTo: 760, type: 'sine', dur: 0.4, vol: 0.14, cutoff: 1600, attack: 0.05 });
     }
-    function playIntroBurst() { playTone(660, 'triangle', 0.16); playTone(990, 'sine', 0.22); }
+    function playIntroBurst() {
+      chord([523, 784], { type: 'sine', dur: 0.25, vol: 0.14, cutoff: 2800 });
+      tone({ freq: 1047, type: 'sine', dur: 0.3, vol: 0.07, cutoff: 3200, delay: 0.03 });
+    }
 
     /* ===== 开场动画 ===== */
     function startIntro() {
@@ -678,7 +728,7 @@
     function enterPlay() {
       const wasStart = state.messageMode === 'start';
       hideMessage();
-      if (wasStart) startIntro();
+      if (wasStart) { startIntro(); startStageMusic(); }
       startLoop();
     }
 
@@ -855,6 +905,8 @@
       state.platforms = [];
       state.shakeTimer = 0;
       stopBossMusic();
+      stopStageMusic();
+      stopStage2Music();
       player.x = 120;
       player.y = canvasHeight - groundHeight - player.height;
       player.dy = 0;
@@ -867,13 +919,17 @@
       player.chargeTime = 0;
       player.shield = true;
       player.invuln = 0;
-      document.getElementById('shield').textContent = '有';
+      { const sh = document.getElementById('shield'); sh.textContent = '有'; sh.className = 'on'; }
       resetPlayerFeel();
       scoreEl.textContent = state.score;
       speedEl.textContent = state.speed.toFixed(1);
       document.getElementById('stage').textContent = state.stage;
       document.getElementById('bestScore').textContent = state.bestScore;
       { const bs = document.getElementById('btnShoot'); if (bs) bs.style.display = 'none'; } // 第一关不需要射击
+      // 第一关进度条：显示并归零
+      { const pg = document.getElementById('progress'); if (pg) pg.style.display = 'block'; }
+      { const pf = document.getElementById('progressFill'); if (pf) pf.style.width = '0%'; }
+      { const pt = document.getElementById('progressText'); if (pt) pt.textContent = '0 / ' + state.obstaclesToPass; }
       showMessage('按空格开始游戏', '开始', 'start');
       drawScene();
     }
@@ -890,24 +946,29 @@
       const osc1 = audioCtx.createOscillator();
       const osc2 = audioCtx.createOscillator();
       const lfo = audioCtx.createOscillator();
+      const lfoGain = audioCtx.createGain();
       const filter = audioCtx.createBiquadFilter();
       const gain = audioCtx.createGain();
-      osc1.type = 'triangle';
-      osc2.type = 'sawtooth';
-      osc1.frequency.value = 100;
-      osc2.frequency.value = 140;
+      // 柔和低沉铺底 + 五度和声（sine 波，无尖啸）
+      osc1.type = 'sine';
+      osc2.type = 'sine';
+      osc1.frequency.value = 65;    // 低沉根音
+      osc2.frequency.value = 97.5;  // 纯五度和声
       filter.type = 'lowpass';
-      filter.frequency.value = 520;
-      filter.Q.value = 12;
+      filter.frequency.value = 380;
+      filter.Q.value = 1.2;         // 低 Q，避免共振尖啸
+      // 缓慢起伏，轻微调制截止频率
       lfo.type = 'sine';
-      lfo.frequency.value = 0.45;
-      lfo.connect(filter.frequency);
+      lfo.frequency.value = 0.18;
+      lfoGain.gain.value = 70;
+      lfo.connect(lfoGain);
+      lfoGain.connect(filter.frequency);
       osc1.connect(filter);
       osc2.connect(filter);
       filter.connect(gain);
-      gain.connect(audioCtx.destination);
-      gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.12, audioCtx.currentTime + 0.5);
+      gain.connect(masterGain);
+      gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.08, audioCtx.currentTime + 0.8); // 更低音量、缓入
       osc1.start();
       osc2.start();
       lfo.start();
@@ -924,6 +985,77 @@
       state.bossMusic = null;
     }
 
+    // ===== 第一关背景音乐（轻快循环：旋律 + 低音 + 轻节拍） =====
+    function startStageMusic() {
+      if (state.stageMusic) return;
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const track = audioCtx.createGain();
+      track.gain.value = 0.0001;
+      track.connect(masterGain);
+      track.gain.linearRampToValueAtTime(1, audioCtx.currentTime + 0.6); // 淡入
+      const bpm = 122;
+      const eighth = (60 / bpm) / 2; // 八分音符时长（秒）
+      // 4 小节循环（C 大调，轻快）
+      const melody = [523,659,784,659, 587,784,988,784, 659,784,1047,784, 587,659,880,784];
+      const bass   = [131,131,196,196, 147,147,196,196, 165,165,196,196, 147,147,196,196];
+      let step = 0;
+      const timer = setInterval(() => {
+        if (!state.stageMusic) return;
+        const i = step % melody.length;
+        const m = melody[i], b = bass[i];
+        if (m) tone({ freq: m, type: 'triangle', dur: eighth * 0.95, vol: 0.055, cutoff: 2200, dest: track });
+        if (b) tone({ freq: b, type: 'sine', dur: eighth * 1.2, vol: 0.05, cutoff: 500, dest: track });
+        if (step % 2 === 0) tone({ freq: 2100, type: 'sine', dur: 0.03, vol: 0.02, cutoff: 4000, dest: track }); // 轻节拍
+        step++;
+      }, eighth * 1000);
+      state.stageMusic = { timer, track };
+    }
+    function stopStageMusic() {
+      if (!state.stageMusic) return;
+      const { timer, track } = state.stageMusic;
+      const now = audioCtx.currentTime;
+      track.gain.cancelScheduledValues(now);
+      track.gain.setValueAtTime(track.gain.value, now);
+      track.gain.linearRampToValueAtTime(0.0001, now + 0.5); // 淡出
+      setTimeout(() => { clearInterval(timer); try { track.disconnect(); } catch (e) {} }, 560);
+      state.stageMusic = null;
+    }
+
+    // ===== 第二关战斗背景音乐（A 小调，更快更紧张，低音驱动） =====
+    function startStage2Music() {
+      if (state.stage2Music) return;
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const track = audioCtx.createGain();
+      track.gain.value = 0.0001;
+      track.connect(masterGain);
+      track.gain.linearRampToValueAtTime(1, audioCtx.currentTime + 0.6); // 淡入
+      const bpm = 142;
+      const eighth = (60 / bpm) / 2;
+      const melody = [440,523,659,523, 440,523,587,523, 415,494,622,494, 440,659,587,880];
+      const bass   = [110,110,110,110, 98,98,98,98, 104,104,104,104, 110,110,98,110];
+      let step = 0;
+      const timer = setInterval(() => {
+        if (!state.stage2Music) return;
+        const i = step % melody.length;
+        const m = melody[i], b = bass[i];
+        if (m) tone({ freq: m, type: 'triangle', dur: eighth * 0.8, vol: 0.05, cutoff: 2000, dest: track });
+        if (b) tone({ freq: b, type: 'sine', dur: eighth * 0.95, vol: 0.075, cutoff: 460, dest: track }); // 低音强驱动
+        if (step % 2 === 0) tone({ freq: 1900, type: 'sine', dur: 0.025, vol: 0.022, cutoff: 5000, dest: track }); // 急促节拍
+        step++;
+      }, eighth * 1000);
+      state.stage2Music = { timer, track };
+    }
+    function stopStage2Music() {
+      if (!state.stage2Music) return;
+      const { timer, track } = state.stage2Music;
+      const now = audioCtx.currentTime;
+      track.gain.cancelScheduledValues(now);
+      track.gain.setValueAtTime(track.gain.value, now);
+      track.gain.linearRampToValueAtTime(0.0001, now + 0.5); // 淡出
+      setTimeout(() => { clearInterval(timer); try { track.disconnect(); } catch (e) {} }, 560);
+      state.stage2Music = null;
+    }
+
     function addShake(strength, time) {
       state.shakeStrength = Math.max(state.shakeStrength, strength);
       state.shakeTimer = Math.max(state.shakeTimer, time);
@@ -932,6 +1064,8 @@
 
     function endGame(text) {
       stopBossMusic();
+      stopStageMusic();
+      stopStage2Music();
       state.active = false;
       updateBestScore();
       document.getElementById('bestScore').textContent = state.bestScore;
@@ -964,7 +1098,7 @@
       if (player.shield) {
         player.shield = false;
         player.invuln = 70;
-        document.getElementById('shield').textContent = '无';
+        { const sh = document.getElementById('shield'); sh.textContent = '无'; sh.className = 'off'; }
         playShieldBreakSound();
         addShake(6, 10);
         spawnParticles(player.x + player.width / 2, player.y + player.height / 2, 26, {
@@ -985,6 +1119,8 @@
     }
 
     function startStage2() {
+      stopStageMusic(); // 结束第一关背景音乐
+      startStage2Music(); // 开启第二关战斗音乐
       state.stage = 2;
       state.score = 0;
       state.speed = 1.1;
@@ -1014,6 +1150,7 @@
       scoreEl.textContent = state.score;
       speedEl.textContent = state.speed.toFixed(1);
       { const bs = document.getElementById('btnShoot'); if (bs) bs.style.display = 'flex'; } // 第二关显示射击键
+      { const pg = document.getElementById('progress'); if (pg) pg.style.display = 'none'; } // 第二关隐藏进度条
       showMessage('第二关开启！可二段跳，按 J 蓄力射击。按空格继续', '进入第二关', 'stage2');
     }
 
@@ -1129,6 +1266,7 @@
         hitTimer: 0,
         particles: [],
       };
+      stopStage2Music(); // 停止普通战斗音乐
       createBossMusic();
       showMessage('警告：Boss来袭！按空格继续战斗', '挑战 Boss', 'boss');
     }
@@ -1337,6 +1475,9 @@
           state.passedObstacles += 1;
           state.score = state.passedObstacles;
           scoreEl.textContent = state.score;
+          // 更新第一关进度条
+          { const pf = document.getElementById('progressFill'); if (pf) pf.style.width = (state.passedObstacles / state.obstaclesToPass * 100) + '%'; }
+          { const pt = document.getElementById('progressText'); if (pt) pt.textContent = state.passedObstacles + ' / ' + state.obstaclesToPass; }
           if (state.passedObstacles === state.obstaclesToPass) {
             state.door = {
               x: canvasWidth - 120,
@@ -2667,56 +2808,93 @@
       }
     }
     // ===== 全局多点触控（遍历所有触点，彻底防止按键卡死，支持同时移动+跳跃） =====
-    const touchButtonDefs = [
-      { id: 'btnLeft', code: 'KeyA' },
-      { id: 'btnRight', code: 'KeyD' },
+    // 右侧动作按钮（跳 / 蹲 / 射）
+    const actionButtonDefs = [
       { id: 'btnJump', code: 'Space' },
       { id: 'btnCrouch', code: 'KeyS' },
       { id: 'btnShoot', code: 'KeyJ' },
     ];
     let activeTouchCodes = new Set();
 
-    function updateTouchState(touchList) {
-      const now = new Set();
-      const defs = touchButtonDefs.map(d => {
+    // 左侧虚拟摇杆
+    const joystick = document.getElementById('joystick');
+    const jbase = joystick ? joystick.querySelector('.jbase') : null;
+    const jknob = joystick ? joystick.querySelector('.jknob') : null;
+    let joyId = null, joyBaseX = 0, joyBaseY = 0;
+    const JOY_RANGE = 64, JOY_DEAD = 12;
+
+    function showJoystick(bx, by, dx) {
+      if (!joystick) return;
+      joystick.style.display = 'block';
+      jbase.style.left = bx + 'px'; jbase.style.top = by + 'px';
+      jknob.style.left = (bx + dx) + 'px'; jknob.style.top = by + 'px';
+    }
+    function hideJoystick() { if (joystick) joystick.style.display = 'none'; }
+
+    function processTouches(touchList) {
+      let hitControl = false;
+      const defs = actionButtonDefs.map(d => {
         const el = document.getElementById(d.id);
         return { code: d.code, el, rect: el.getBoundingClientRect() };
       });
-      let hitControl = false;
-      const pad = 22; // 扩大命中范围，更容易按到
+      const pad = 22;
+      const btnNow = new Set();
+      let joyTouch = null;
+
       for (const t of touchList) {
+        // 已分配的摇杆触点：用 identifier 持续跟踪，不再受区域限制
+        if (t.identifier === joyId) { joyTouch = t; hitControl = true; continue; }
+        // 右侧动作按钮命中
+        let onButton = false;
         for (const d of defs) {
           if (t.clientX >= d.rect.left - pad && t.clientX <= d.rect.right + pad &&
               t.clientY >= d.rect.top - pad && t.clientY <= d.rect.bottom + pad) {
-            now.add(d.code);
-            hitControl = true;
+            btnNow.add(d.code); onButton = true; hitControl = true;
           }
         }
+        if (onButton) continue;
+        // 左半屏空白处按下 → 激活摇杆
+        if (joyId === null && t.clientX < window.innerWidth * 0.5) {
+          joyId = t.identifier; joyBaseX = t.clientX; joyBaseY = t.clientY;
+          joyTouch = t; hitControl = true;
+        }
       }
-      // 新按下的键
-      for (const c of now) {
+
+      // 摇杆状态
+      if (joyTouch) {
+        let dx = joyTouch.clientX - joyBaseX;
+        dx = Math.max(-JOY_RANGE, Math.min(JOY_RANGE, dx));
+        state.keys.KeyA = dx < -JOY_DEAD;
+        state.keys.KeyD = dx > JOY_DEAD;
+        showJoystick(joyBaseX, joyBaseY, dx);
+      } else if (joyId !== null) {
+        joyId = null;
+        state.keys.KeyA = false; state.keys.KeyD = false;
+        hideJoystick();
+      }
+
+      // 右侧按钮 按下/松开 差异处理
+      for (const c of btnNow) {
         if (!activeTouchCodes.has(c)) {
           pressKey(c);
-          const def = touchButtonDefs.find(d => d.code === c);
+          const def = actionButtonDefs.find(d => d.code === c);
           if (def) document.getElementById(def.id).classList.add('active');
         }
       }
-      // 已松开的键
       for (const c of activeTouchCodes) {
-        if (!now.has(c)) {
+        if (!btnNow.has(c)) {
           releaseKey(c);
-          const def = touchButtonDefs.find(d => d.code === c);
+          const def = actionButtonDefs.find(d => d.code === c);
           if (def) document.getElementById(def.id).classList.remove('active');
         }
       }
-      activeTouchCodes = now;
+      activeTouchCodes = btnNow;
       return hitControl;
     }
 
     function onTouch(e) {
-      // e.touches 始终是当前仍按住的所有触点（touchend 时已移除抬起的），据此重算状态
-      const hit = updateTouchState(e.touches);
-      if (hit) e.preventDefault(); // 仅按到控制键时拦截，避免影响“开始”按钮点击
+      const hit = processTouches(e.touches);
+      if (hit) e.preventDefault();
     }
     document.addEventListener('touchstart', onTouch, { passive: false });
     document.addEventListener('touchmove', onTouch, { passive: false });
