@@ -170,6 +170,51 @@
       transform: translateY(-2px) scale(1.03);
       box-shadow: 0 10px 26px rgba(31, 140, 255, 0.5);
     }
+    #modeSelect { display: none; }
+    #modeSelect.show { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-top: 16px; }
+    #modeSelect button { margin-top: 0; }
+
+    #pauseBtn {
+      position: absolute; top: 8px; right: 10px; z-index: 22;
+      width: 40px; height: 40px; border-radius: 50%;
+      border: 1px solid rgba(126,240,255,0.4);
+      background: rgba(20,30,60,0.55);
+      color: #cdefff; font-size: 16px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #pauseBtn:active { transform: scale(0.92); }
+
+    #settingsBtn {
+      position: absolute; top: 8px; right: 56px; z-index: 22;
+      width: 40px; height: 40px; border-radius: 50%;
+      border: 1px solid rgba(126,240,255,0.4);
+      background: rgba(20,30,60,0.55); color: #cdefff;
+      font-size: 18px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #settingsBtn:active { transform: scale(0.92); }
+    #settingsPanel {
+      display: none;
+      position: absolute; inset: 0; z-index: 30;
+      background: rgba(2,4,12,0.92);
+      flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px; color: #eafaff; padding: 24px;
+    }
+    #settingsPanel.show { display: flex; }
+    #settingsPanel .sTitle { font-size: 24px; font-weight: bold; margin-bottom: 6px; letter-spacing: 0.12em; }
+    #settingsPanel .sRow { display: flex; align-items: center; justify-content: space-between; width: 240px; max-width: 82%; font-size: 16px; }
+    #settingsPanel input[type=range] { width: 130px; }
+    #settingsPanel .stog {
+      min-width: 54px; padding: 6px 14px; border-radius: 16px; cursor: pointer;
+      border: 1px solid rgba(126,240,255,0.5); background: rgba(30,60,45,0.5); color: #7dffb0; font-size: 14px;
+    }
+    #settingsPanel .stog.off { background: rgba(60,30,40,0.5); color: #ff9bae; border-color: rgba(255,120,150,0.4); }
+    #settingsPanel #closeSettings {
+      margin-top: 8px; padding: 10px 26px; border: none; border-radius: 10px;
+      background: linear-gradient(135deg,#2fa8ff,#1f6cff); color:#fff; font-size:16px; cursor:pointer;
+    }
 
     #instructions {
       margin-top: 16px;
@@ -183,67 +228,81 @@
     html, body { overscroll-behavior: none; }
     canvas { touch-action: none; }
 
-    #touchControls {
+    /* ── 全屏透明触控层（仅覆盖 canvas 区域，不遮挡 HUD 按钮） ── */
+    #touchOverlay {
       display: none;
       position: absolute;
       left: 0; right: 0; bottom: 0;
-      justify-content: flex-end;
-      align-items: flex-end;
-      padding: 12px 16px 30px;
-      box-sizing: border-box;
-      pointer-events: none;
-      z-index: 15;
+      /* top 由 JS 动态设置为 HUD 高度，CSS 兜底值 */
+      top: 44px;
+      z-index: 14;
+      pointer-events: auto;
+      touch-action: none;
+      user-select: none; -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
     }
-    #touchControls .pad { display: flex; align-items: flex-end; }
-    #touchControls .pad.right { gap: 16px; }
 
-    /* 左侧虚拟摇杆（控制左右移动） */
+    /* 右侧三分区提示 canvas（与 touchOverlay 对齐） */
+    #touchHintCanvas {
+      display: none;
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      top: 44px;
+      z-index: 13;
+      pointer-events: none;
+      opacity: 1;
+    }
+
+    /* 随落点摇杆 */
     #joystick {
-      position: fixed;
+      display: none;
+      position: absolute;   /* 随手指落点定位，不再 fixed */
+      width: 130px; height: 130px;
       z-index: 16;
       pointer-events: none;
-      display: none;
+      transform: translate(-50%, -50%);  /* 以中心定位 */
+      transition: opacity 0.15s;
     }
     #joystick .jbase {
-      position: absolute;
-      width: 118px; height: 118px;
+      position: absolute; inset: 0;
       border-radius: 50%;
-      border: 2px solid rgba(126,240,255,0.45);
-      background: rgba(20,30,60,0.32);
-      box-shadow: 0 0 20px rgba(120,240,255,0.18) inset;
-      transform: translate(-50%, -50%);
+      border: 2px solid rgba(126,240,255,0.5);
+      background: rgba(20,30,60,0.38);
+      box-shadow: 0 0 24px rgba(120,240,255,0.22) inset;
     }
     #joystick .jknob {
       position: absolute;
-      width: 56px; height: 56px;
+      left: 50%; top: 50%;
+      width: 58px; height: 58px;
+      margin: -29px 0 0 -29px;
       border-radius: 50%;
-      background: rgba(90,210,255,0.6);
-      box-shadow: 0 0 18px rgba(120,240,255,0.65);
-      transform: translate(-50%, -50%);
+      background: radial-gradient(circle at 35% 35%, rgba(160,240,255,0.9), rgba(60,180,255,0.6));
+      box-shadow: 0 0 20px rgba(120,240,255,0.7), 0 2px 6px rgba(0,0,0,0.4);
+      /* 不使用 CSS transition，由 JS 直接设置以避免延迟 */
     }
-    #touchControls .btn {
-      pointer-events: auto;
-      width: 86px; height: 86px;
-      border-radius: 50%;
-      border: 2px solid rgba(126,240,255,0.72);
-      background: rgba(24,34,66,0.62);
-      color: #eafaff;
-      font-size: 34px;
-      display: flex; align-items: center; justify-content: center;
-      user-select: none; -webkit-user-select: none;
-      -webkit-tap-highlight-color: transparent;
-      touch-action: none;
-    }
-    #touchControls .btn.active { background: rgba(90,210,255,0.85); transform: scale(0.9); }
-    #touchControls .btn.jump { width: 108px; height: 108px; font-size: 44px; border-color: rgba(140,255,180,0.9); background: rgba(30,64,48,0.65); }
-    #touchControls .btn.shoot { border-color: rgba(255,224,122,0.9); color: #ffe89a; }
 
-    /* 横屏手机高度较小时，缩小按钮避免遮挡画面 */
-    @media (max-height: 460px) {
-      #touchControls { padding: 8px 14px 14px; }
-      #touchControls .btn { width: 64px; height: 64px; font-size: 26px; }
-      #touchControls .btn.jump { width: 82px; height: 82px; font-size: 34px; }
+    /* 右侧区域标签（触控提示） */
+    #touchControls {
+      display: none;
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 15;
     }
+    /* 右侧区域三个标签文字 */
+    .tzone-label {
+      position: absolute;
+      right: 18px;
+      color: rgba(200,240,255,0.5);
+      font-size: 13px;
+      font-family: sans-serif;
+      letter-spacing: 0.04em;
+      pointer-events: none;
+      user-select: none;
+    }
+    .tzone-label.jump-lbl  { bottom: 62%; }
+    .tzone-label.shoot-lbl { bottom: 43%; }
+    .tzone-label.crouch-lbl{ bottom: 24%; }
 
     /* 竖屏建议横屏 */
     #rotateHint {
@@ -302,20 +361,39 @@
     </div>
     <div id="progress"><div id="progressFill"></div><span id="progressText">0 / 55</span></div>
     <canvas id="gameCanvas" width="900" height="450"></canvas>
+    <button id="pauseBtn" aria-label="暂停">⏸</button>
+    <button id="settingsBtn" aria-label="设置">⚙</button>
+    <div id="settingsPanel">
+      <div class="sTitle">设置</div>
+      <label class="sRow"><span>音量</span><input id="volSlider" type="range" min="0" max="100" value="50"></label>
+      <div class="sRow"><span>屏幕震动</span><button id="shakeToggle" class="stog">开</button></div>
+      <div class="sRow"><span>画面闪光</span><button id="flashToggle" class="stog">开</button></div>
+      <div class="sRow"><span>皮肤</span><div id="skinPicker" style="display:flex;flex-wrap:wrap;justify-content:flex-end;max-width:150px;"></div></div>
+      <div class="sRow"><span>成就</span><span id="achCount" style="color:#ffd86a;font-weight:bold;">0 / 5</span></div>
+      <button id="closeSettings">关闭</button>
+    </div>
     <div id="message">
       <div id="messageText">按空格开始游戏</div>
       <button id="restartButton">继续</button>
+      <div id="modeSelect">
+        <button id="btnStory">🎮 剧情模式</button>
+        <button id="btnEndless">♾️ 无尽模式</button>
+      </div>
       <div id="instructions">
         电脑：A/D 移动，W/空格 跳跃，S 下蹲，J 蓄力射击（第二关）。<br>手机：使用屏幕左下移动、右下跳跃/下蹲/射击。
       </div>
     </div>
+    <!-- 触控提示层（Canvas 绘制右侧分区轮廓） -->
+    <canvas id="touchHintCanvas"></canvas>
+    <!-- 全屏透明触控捕获层 -->
+    <div id="touchOverlay"></div>
+    <!-- 区域激活高亮（CSS class 切换） -->
     <div id="touchControls">
-      <div class="pad right">
-        <button class="btn shoot" id="btnShoot">✦</button>
-        <button class="btn" id="btnCrouch">▼</button>
-        <button class="btn jump" id="btnJump">▲</button>
-      </div>
+      <span class="tzone-label jump-lbl" id="lblJump">▲ 跳</span>
+      <span class="tzone-label shoot-lbl" id="lblShoot">✦ 射</span>
+      <span class="tzone-label crouch-lbl" id="lblCrouch">▼ 蹲</span>
     </div>
+    <!-- 随落点浮动摇杆 -->
     <div id="joystick"><div class="jbase"></div><div class="jknob"></div></div>
   </div>
 
@@ -421,8 +499,20 @@
       shakeTimer: 0,
       shakeStrength: 0,
       shakeBase: 0,
+      floatTexts: [],
+      items: [],
+      itemTimer: 300,
+      doubleTimer: 0,
+      combo: 0,
+      comboTimer: 0,
+      hurtTimer: 0,
+      comboScale: 1,
+      comboScaleVel: 0,
+      kills: 0,
+      runStart: 0,
       intro: { active: false, t: 0, dur: 100, ring: 0, flash: 0, landed: false, goT: 0 },
       messageMode: 'start',
+      mode: 'story',
       keys: {
         Space: false,
         KeyA: false,
@@ -432,6 +522,9 @@
       },
       fallingObjects: [],
       fallTimer: 120,
+      skin: localStorage.getItem('jd_skin') || 'cyan',
+      tookHit: false,
+      itemKinds: {},
     };
 
     /* ============================ 音效 ============================ */
@@ -439,6 +532,105 @@
     const masterGain = audioCtx.createGain();
     masterGain.gain.value = 0.5;
     masterGain.connect(audioCtx.destination);
+
+    // ===== 设置（本地偏好：音量 / 震动 / 闪光） =====
+    const settings = {
+      volume: Number(localStorage.getItem('jd_volume') != null ? localStorage.getItem('jd_volume') : 50),
+      shake: localStorage.getItem('jd_shake') !== '0',
+      flash: localStorage.getItem('jd_flash') !== '0',
+    };
+    function applySettings() {
+      masterGain.gain.value = Math.max(0, Math.min(1, settings.volume / 100));
+    }
+    applySettings();
+
+    /* ===== 皮肤 / 主题 / 成就 / 排行榜 系统 ===== */
+    const SKINS = [
+      { id:'cyan',   name:'霓虹青', glow:'#4fe3ff', glowRgb:'79,227,255',  core:'#8df4ff', scarf:'#ff5d7a', scarfDark:'#c23a5a', unlock:()=>true,                          cond:'默认' },
+      { id:'ember',  name:'烈焰橙', glow:'#ff8a3c', glowRgb:'255,138,60',  core:'#ffd07a', scarf:'#ffd15d', scarfDark:'#c26a1a', unlock:()=> state.bestScore>=30,          cond:'最高分 ≥ 30' },
+      { id:'jade',   name:'翡翠绿', glow:'#3fe08a', glowRgb:'63,224,138',  core:'#b6ffd0', scarf:'#7cffb0', scarfDark:'#2a9e63', unlock:()=> hasAch('clear'),               cond:'击败 Boss 通关' },
+      { id:'violet', name:'幻紫',   glow:'#b26bff', glowRgb:'178,107,255', core:'#e0c0ff', scarf:'#c9a3ff', scarfDark:'#7a3fb0', unlock:()=> (getLeaderboard()[0]||0)>=60, cond:'无尽榜首 ≥ 60' },
+      { id:'gold',   name:'黄金',   glow:'#ffd700', glowRgb:'255,215,0',   core:'#fff3b0', scarf:'#ffe07a', scarfDark:'#c2971a', unlock:()=> getAchList().length>=4,        cond:'解锁 4 个成就' },
+    ];
+    function currentSkin() { return SKINS.find(s => s.id === state.skin) || SKINS[0]; }
+
+    const THEMES = {
+      stage1: { sky:['#1c1248','#141c3e','#05060c'], ground:['#2f3a63','#1c2340','#0f1428'], accent:'#7fb0ff' },
+      stage2: { sky:['#071a30','#0a2338','#03080f'], ground:['#1f3b52','#132436','#0a141f'], accent:'#5ad0ff' },
+      boss:   { sky:['#2a0a1c','#1a0820','#080308'], ground:['#4a1f30','#2a1220','#140810'], accent:'#ff6d8a' },
+    };
+    function currentTheme() { return state.boss ? THEMES.boss : (state.stage === 2 ? THEMES.stage2 : THEMES.stage1); }
+
+    const ACHIEVEMENTS = [
+      { id:'clear',     name:'首次通关', icon:'🏁', desc:'击败 Boss 通关' },
+      { id:'combo20',   name:'连击大师', icon:'🔥', desc:'达成 20 连击' },
+      { id:'items3',    name:'收藏家',   icon:'🎁', desc:'一局集齐三种道具' },
+      { id:'endless50', name:'无尽勇者', icon:'♾️', desc:'无尽模式得分 ≥ 50' },
+      { id:'noHit1',    name:'一尘不染', icon:'✨', desc:'无伤通过第一关' },
+    ];
+    function getAchList() { try { return JSON.parse(localStorage.getItem('jd_ach') || '[]'); } catch(e){ return []; } }
+    function hasAch(id) { return getAchList().includes(id); }
+    function unlockAch(id) {
+      if (hasAch(id)) return;
+      const list = getAchList(); list.push(id);
+      localStorage.setItem('jd_ach', JSON.stringify(list));
+      const a = ACHIEVEMENTS.find(x => x.id === id);
+      if (a) showAchToast('🏅 成就解锁：' + a.icon + ' ' + a.name);
+      try { playWinSound(); } catch(e){}
+      renderSkinPicker();
+    }
+    function getLeaderboard() { try { return JSON.parse(localStorage.getItem('jd_lb') || '[]'); } catch(e){ return []; } }
+    function addLeaderboard(score) {
+      const lb = getLeaderboard(); lb.push(score);
+      lb.sort((a,b)=> b - a);
+      const top = lb.slice(0,5);
+      localStorage.setItem('jd_lb', JSON.stringify(top));
+      return top.indexOf(score) + 1; // 名次（1-based；未进前 5 返回 0）
+    }
+
+    // 成就 / 提示 浮层（顶部飘出）
+    let _toastBox = null;
+    function showAchToast(text) {
+      if (!_toastBox) {
+        _toastBox = document.createElement('div');
+        _toastBox.style.cssText = 'position:absolute;top:58px;left:50%;transform:translateX(-50%);z-index:40;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;';
+        (document.getElementById('gameContainer') || document.body).appendChild(_toastBox);
+      }
+      const t = document.createElement('div');
+      t.textContent = text;
+      t.style.cssText = 'padding:9px 18px;border-radius:20px;background:linear-gradient(135deg,rgba(30,50,90,0.96),rgba(20,30,60,0.96));border:1px solid rgba(126,240,255,0.5);color:#eafaff;font-size:15px;font-weight:bold;box-shadow:0 6px 20px rgba(0,0,0,0.5),0 0 18px rgba(120,240,255,0.35);opacity:0;transform:translateY(-12px);transition:opacity .4s ease,transform .4s ease;white-space:nowrap;';
+      _toastBox.appendChild(t);
+      requestAnimationFrame(() => { t.style.opacity = '1'; t.style.transform = 'translateY(0)'; });
+      setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateY(-12px)'; setTimeout(()=> t.remove(), 450); }, 2600);
+    }
+
+    // 皮肤选择器（设置面板内渲染）
+    function renderSkinPicker() {
+      const box = document.getElementById('skinPicker');
+      if (box) {
+        box.innerHTML = '';
+        SKINS.forEach(sk => {
+          const unlocked = sk.unlock();
+          const b = document.createElement('button');
+          b.title = unlocked ? sk.name : (sk.name + '（' + sk.cond + '）');
+          b.textContent = unlocked ? '' : '🔒';
+          b.style.cssText = 'width:30px;height:30px;border-radius:50%;cursor:pointer;margin:0 3px 3px 0;font-size:12px;display:inline-flex;align-items:center;justify-content:center;padding:0;';
+          b.style.background = 'radial-gradient(circle at 35% 30%, ' + sk.core + ', ' + sk.glow + ' 72%)';
+          b.style.border = (state.skin === sk.id) ? '3px solid #fff' : '2px solid rgba(126,240,255,0.4)';
+          b.style.opacity = unlocked ? '1' : '0.55';
+          b.addEventListener('click', () => {
+            if (!sk.unlock()) { showAchToast('🔒 未解锁：' + sk.cond); return; }
+            state.skin = sk.id;
+            localStorage.setItem('jd_skin', sk.id);
+            renderSkinPicker();
+            if (typeof drawScene === 'function') drawScene();
+          });
+          box.appendChild(b);
+        });
+      }
+      const ac = document.getElementById('achCount');
+      if (ac) ac.textContent = getAchList().length + ' / ' + ACHIEVEMENTS.length;
+    }
 
     function tone(opts) {
       const {
@@ -538,6 +730,7 @@
       player.squash = 1; player.stretch = 1;
       player.direction = 'right';
       state.particles = [];
+      state.floatTexts = [];
     }
 
     function updateIntro() {
@@ -719,7 +912,7 @@
         ctx.textAlign = 'left';
       }
       // 落地闪白
-      if (io.flash > 0) {
+      if (io.flash > 0 && settings.flash) {
         ctx.fillStyle = `rgba(255,255,255,${io.flash})`;
         ctx.fillRect(0, 0, canvasWidth, canvasHeight);
       }
@@ -728,7 +921,7 @@
     function enterPlay() {
       const wasStart = state.messageMode === 'start';
       hideMessage();
-      if (wasStart) { startIntro(); startStageMusic(); }
+      if (wasStart) { startIntro(); startStageMusic(); state.runStart = performance.now(); }
       startLoop();
     }
 
@@ -779,6 +972,9 @@
     }
 
     function spawnParticles(x, y, count, opts = {}) {
+      const MAX_PARTICLES = 600; // 上限，防止低端设备卡顿
+      if (state.particles.length >= MAX_PARTICLES) return;
+      count = Math.min(count, MAX_PARTICLES - state.particles.length);
       const colors = Array.isArray(opts.color) ? opts.color : [opts.color || '#8df4ff'];
       const spread = opts.spread != null ? opts.spread : Math.PI * 2;
       const baseAngle = opts.angle != null ? opts.angle : 0;
@@ -810,6 +1006,120 @@
         p.life -= 1;
       }
       state.particles = state.particles.filter(p => p.life > 0);
+    }
+    // 落地冲击环更新
+    function updateLandRings() {
+      if (!state.landRings || !state.landRings.length) return;
+      for (const ring of state.landRings) {
+        const progress = 1 - ring.life;
+        ring.r = 4 + (ring.maxR - 4) * progress;
+        ring.life -= 0.07; // ~14 帧消散
+      }
+      state.landRings = state.landRings.filter(r => r.life > 0);
+    }
+
+    /* ===== 得分飘字 + 连击 ===== */
+    function spawnFloatText(x, y, text, color) {
+      state.floatTexts.push({ x, y, text, color: color || '#eafaff', life: 46, vy: -0.8 });
+    }
+    function updateFloatTexts() {
+      for (const f of state.floatTexts) { f.y += f.vy; f.life -= 1; }
+      state.floatTexts = state.floatTexts.filter(f => f.life > 0);
+    }
+    function drawFloatTexts() {
+      ctx.textAlign = 'center';
+      for (const f of state.floatTexts) {
+        const a = Math.min(1, f.life / 18);
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.font = 'bold 18px Arial';
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(10,14,30,0.7)';
+        ctx.strokeText(f.text, f.x, f.y);
+        ctx.fillStyle = f.color;
+        ctx.fillText(f.text, f.x, f.y);
+        ctx.restore();
+      }
+      ctx.textAlign = 'left';
+    }
+    // 连击加分：连续得分不断档则倍率递增
+    function addScore(base, x, y, color) {
+      state.combo += 1;
+      state.comboTimer = 180;
+      // 弹簧动画：每次得分触发冲量，连击越高冲量越大
+      if (state.combo >= 3) {
+        const impulse = Math.min(0.6, 0.18 + (state.combo - 3) * 0.018);
+        state.comboScaleVel = impulse;
+      }
+      const mult = 1 + Math.floor((state.combo - 1) / 8);
+      const dm = state.doubleTimer > 0 ? 2 : 1;
+      const gain = base * mult * dm;
+      state.score += gain;
+      scoreEl.textContent = state.score;
+      const txt = '+' + gain + (state.combo >= 3 ? ('  连击' + state.combo) : '');
+      spawnFloatText(x, y, txt, (mult >= 2 || dm > 1) ? '#ffd86a' : (color || '#8df4ff'));
+      // 成就：连击达 20
+      if (state.combo >= 20) unlockAch('combo20');
+    }
+
+    /* ===== 道具系统（护盾 / 无敌星 / 双倍分） ===== */
+    function spawnItem() {
+      const types = ['shield', 'star', 'double'];
+      const type = types[Math.floor(Math.random() * types.length)];
+      const gy = canvasHeight - groundHeight;
+      const y = gy - (40 + Math.random() * 70);
+      state.items.push({
+        x: canvasWidth + 40, y, baseY: y, bob: Math.random() * Math.PI * 2,
+        vx: -(3 + state.speed * 1.2), type, r: 16, taken: false,
+      });
+    }
+    function pickItem(type, x, y) {
+      playTone(880, 'sine', 0.12);
+      // 记录已拾取道具类型（用于成就）
+      state.itemKinds[type] = true;
+      if (state.itemKinds['shield'] && state.itemKinds['star'] && state.itemKinds['double']) unlockAch('items3');
+      if (type === 'shield') {
+        player.shield = true;
+        const sh = document.getElementById('shield'); if (sh) { sh.textContent = '有'; sh.className = 'on'; }
+        spawnFloatText(x, y, '🛡 护盾', '#6dffb0');
+        spawnParticles(x, y, 16, { color: ['#6dffb0', '#ffffff'], speedMin: 1, speedMax: 4, gravity: 0.05, life: 24, size: 3 });
+      } else if (type === 'star') {
+        player.invuln = Math.max(player.invuln, 360);
+        spawnFloatText(x, y, '⭐ 无敌', '#ffe07a');
+        spawnParticles(x, y, 20, { color: ['#ffe07a', '#ffffff'], speedMin: 1, speedMax: 5, gravity: 0.05, life: 26, size: 3 });
+      } else {
+        state.doubleTimer = 420;
+        spawnFloatText(x, y, '✨ 双倍分', '#8df4ff');
+        spawnParticles(x, y, 18, { color: ['#8df4ff', '#ffffff'], speedMin: 1, speedMax: 4, gravity: 0.05, life: 24, size: 3 });
+      }
+    }
+    function updateItems() {
+      const pb = { x: player.x + 6, y: player.y + 8, width: player.width - 12, height: player.height - 10 };
+      for (const it of state.items) {
+        it.x += it.vx;
+        it.bob += 0.08;
+        it.y = it.baseY + Math.sin(it.bob) * 6;
+        if (!it.taken && rectOverlap(pb, { x: it.x - it.r, y: it.y - it.r, width: it.r * 2, height: it.r * 2 })) {
+          it.taken = true;
+          pickItem(it.type, it.x, it.y);
+        }
+      }
+      state.items = state.items.filter(it => !it.taken && it.x > -40);
+    }
+    function drawItems() {
+      for (const it of state.items) {
+        const col = it.type === 'shield' ? '#6dffb0' : it.type === 'star' ? '#ffe07a' : '#8df4ff';
+        ctx.save();
+        ctx.shadowBlur = 16; ctx.shadowColor = col;
+        const g = ctx.createRadialGradient(it.x, it.y, 0, it.x, it.y, it.r);
+        g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, col); g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(it.x, it.y, it.r, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        ctx.font = '16px Arial'; ctx.textAlign = 'center';
+        ctx.fillText(it.type === 'shield' ? '🛡' : it.type === 'star' ? '⭐' : '✨', it.x, it.y + 5);
+        ctx.textAlign = 'left';
+      }
     }
 
     function updateBackground() {
@@ -859,6 +1169,10 @@
       }
       state.active = false;
       state.messageMode = mode;
+      // 开始界面显示模式选择按钮，其余界面显示“继续/重新开始”按钮
+      const ms = document.getElementById('modeSelect');
+      if (ms) ms.classList.toggle('show', mode === 'start');
+      restartButton.style.display = (mode === 'start') ? 'none' : '';
     }
 
     function hideMessage() {
@@ -884,6 +1198,8 @@
     function resetGame() {
       if (!state.stars.length) initBackground();
       state.stage = 1;
+      state.mode = 'story';
+      state.obstaclesToPass = 55;
       state.score = 0;
       state.speed = 1;
       state.spawnTimer = 0;
@@ -893,6 +1209,18 @@
       state.playerShots = [];
       state.enemyShots = [];
       state.particles = [];
+      state.floatTexts = [];
+      state.combo = 0;
+      state.comboTimer = 0;
+      state.hurtTimer = 0;
+      state.comboScale = 1;
+      state.comboScaleVel = 0;
+      state.kills = 0;
+      state.items = [];
+      state.itemTimer = 300;
+      state.doubleTimer = 0;
+      state.tookHit = false;
+      state.itemKinds = {};
       state.fallingObjects = [];
       state.fallTimer = 120;
       state.boss = null;
@@ -925,11 +1253,12 @@
       speedEl.textContent = state.speed.toFixed(1);
       document.getElementById('stage').textContent = state.stage;
       document.getElementById('bestScore').textContent = state.bestScore;
-      { const bs = document.getElementById('btnShoot'); if (bs) bs.style.display = 'none'; } // 第一关不需要射击
+      { const bs = document.getElementById('lblShoot'); if (bs) bs.style.display = 'none'; } // 第一关不需要射击（隐藏射击提示）
       // 第一关进度条：显示并归零
       { const pg = document.getElementById('progress'); if (pg) pg.style.display = 'block'; }
       { const pf = document.getElementById('progressFill'); if (pf) pf.style.width = '0%'; }
       { const pt = document.getElementById('progressText'); if (pt) pt.textContent = '0 / ' + state.obstaclesToPass; }
+      { const inst = document.getElementById('instructions'); if (inst) inst.innerHTML = '电脑：A/D 移动，W/空格 跳跃，S 下蹲，J 蓄力射击（第二关）。<br>手机：使用屏幕左下移动、右下跳跃/下蹲/射击。'; }
       showMessage('按空格开始游戏', '开始', 'start');
       drawScene();
     }
@@ -1057,6 +1386,7 @@
     }
 
     function addShake(strength, time) {
+      if (!settings.shake) return; // 设置里可关闭屏幕震动
       state.shakeStrength = Math.max(state.shakeStrength, strength);
       state.shakeTimer = Math.max(state.shakeTimer, time);
       state.shakeBase = Math.max(state.shakeBase, time);
@@ -1067,8 +1397,22 @@
       stopStageMusic();
       stopStage2Music();
       state.active = false;
+      const _t = state.runStart ? Math.round((performance.now() - state.runStart) / 1000) : 0;
+      const _rec = state.score > state.bestScore;
       updateBestScore();
       document.getElementById('bestScore').textContent = state.bestScore;
+      // 无尽模式：记录排行榜 + 成就
+      let lbHtml = '';
+      if (state.mode === 'endless') {
+        addLeaderboard(state.score);
+        if (state.score >= 50) unlockAch('endless50');
+        const lb = getLeaderboard();
+        if (lb.length) {
+          lbHtml = '<br><span style="color:#ffd86a;font-size:13px">🏆 无尽排行</span><br>' +
+            lb.map((s, i) => `<span style="font-size:12px">${i+1}. ${s}</span>`).join('<br>');
+        }
+      }
+      { const inst = document.getElementById('instructions'); if (inst) inst.innerHTML = '本局得分 <b>' + state.score + '</b> · 用时 ' + _t + 's · 击杀 ' + state.kills + (_rec ? ' · <b style="color:#ffd86a">🏆 新纪录</b>' : '') + lbHtml; }
       // 死亡爆裂粒子
       spawnParticles(player.x + player.width / 2, player.y + player.height / 2, 30, {
         color: ['#ff6d6d', '#ffd86a', '#ffffff'], speedMin: 2, speedMax: 6, gravity: 0.2, life: 34, size: 4
@@ -1104,21 +1448,34 @@
         spawnParticles(player.x + player.width / 2, player.y + player.height / 2, 26, {
           color: ['#7ef0ff', '#ffffff', '#b6fff0'], speedMin: 2, speedMax: 5.5, gravity: 0.05, life: 28, size: 3
         });
+        // 护盾抵挡也算受伤，标记未无伤通过第一关
+        state.tookHit = true;
+        state.hurtTimer = 38; // 护盾破碎也触发红晕（稍短）
         return;
       }
+      state.tookHit = true;
+      state.hurtTimer = 55; // 受致命伤时红晕更强更久
       endGame(reason);
     }
 
     function winGame() {
       stopBossMusic();
+      stopStageMusic();
+      stopStage2Music();
+      unlockAch('clear'); // 成就：首次通关
+      const _t = state.runStart ? Math.round((performance.now() - state.runStart) / 1000) : 0;
+      const _rec = state.score > state.bestScore;
       updateBestScore();
       document.getElementById('bestScore').textContent = state.bestScore;
+      { const inst = document.getElementById('instructions'); if (inst) inst.innerHTML = '🎉 得分 <b>' + state.score + '</b> · 用时 ' + _t + 's · 击杀 ' + state.kills + (_rec ? ' · <b style="color:#ffd86a">🏆 新纪录</b>' : ''); }
       playWinSound();
       drawScene();
-      showMessage('恭喜！玩家55 击败 Boss，游戏结束', '重新开始', 'end');
+      showMessage('🎉 恭喜通关！击败 Boss，游戏结束', '重新开始', 'end');
     }
 
     function startStage2() {
+      // 成就：无伤通过第一关
+      if (!state.tookHit) unlockAch('noHit1');
       stopStageMusic(); // 结束第一关背景音乐
       startStage2Music(); // 开启第二关战斗音乐
       state.stage = 2;
@@ -1149,7 +1506,9 @@
       document.getElementById('stage').textContent = state.stage;
       scoreEl.textContent = state.score;
       speedEl.textContent = state.speed.toFixed(1);
-      { const bs = document.getElementById('btnShoot'); if (bs) bs.style.display = 'flex'; } // 第二关显示射击键
+      { const bs = document.getElementById('lblShoot'); if (bs) bs.style.display = ''; } // 第二关显示射击提示
+      // 保留第一关未破的护盾，并同步 HUD 显示（不重置 player.shield）
+      { const sh = document.getElementById('shield'); if (sh) { sh.textContent = player.shield ? '有' : '无'; sh.className = player.shield ? 'on' : 'off'; } }
       { const pg = document.getElementById('progress'); if (pg) pg.style.display = 'none'; } // 第二关隐藏进度条
       showMessage('第二关开启！可二段跳，按 J 蓄力射击。按空格继续', '进入第二关', 'stage2');
     }
@@ -1343,10 +1702,10 @@
         }
       }
 
-      // 下蹲：仅地面有效，下蹲时移动减速
+      // 下蹲：仅地面有效，下蹲时仍可左右移动（略减速，保留沉稳感）
       player.crouching = state.keys.KeyS && player.onGround;
 
-      const accel = (player.onGround ? player.accel : player.airAccel) * (player.crouching ? 0.55 : 1);
+      const accel = (player.onGround ? player.accel : player.airAccel) * (player.crouching ? 0.85 : 1);
       if (state.keys.KeyA) {
         player.vx -= accel;
         player.direction = 'left';
@@ -1387,6 +1746,8 @@
       let g = player.gravity;
       if (player.dy > 0) g = player.fallGravity;
       else if (player.dy < 0 && !player.jumpHeld) g = player.lowJumpGravity;
+      // Apex hang：跳跃顶点附近速度极小时短暂减重力，营造悬浮感
+      if (!player.onGround && Math.abs(player.dy) < 2.2) g *= 0.55;
       player.dy += g;
       if (player.dy > 20) player.dy = 20;
 
@@ -1434,6 +1795,16 @@
           spawnParticles(player.x + player.width / 2, player.y + player.height, wave, {
             color: ['#aeb8e0', '#ffffff'], angle: Math.PI, spread: 0.35, speedMin: 3 + impact * 3, speedMax: 6 + impact * 5, gravity: 0.22, life: 18, size: 2.2
           });
+          // 大冲击：地面冲击环（画布 2D 环形扩散 ring）
+          if (impact > 0.35) {
+            state.landRings = state.landRings || [];
+            state.landRings.push({
+              x: player.x + player.width / 2,
+              y: player.y + player.height,
+              r: 4, maxR: 14 + impact * 28,
+              life: 1, alpha: 0.55 + impact * 0.35,
+            });
+          }
           playLandSound(impact);
         }
       }
@@ -1473,8 +1844,7 @@
         if (!obs.passed && obs.x + obs.width < 0) {
           obs.passed = true;
           state.passedObstacles += 1;
-          state.score = state.passedObstacles;
-          scoreEl.textContent = state.score;
+          addScore(1, player.x + player.width / 2, player.y - 12, '#8df4ff');
           // 更新第一关进度条
           { const pf = document.getElementById('progressFill'); if (pf) pf.style.width = (state.passedObstacles / state.obstaclesToPass * 100) + '%'; }
           { const pt = document.getElementById('progressText'); if (pt) pt.textContent = state.passedObstacles + ' / ' + state.obstaclesToPass; }
@@ -1848,8 +2218,8 @@
             if (!shot.charged) shot.x = canvasWidth + 200; // 普通弹命中即消失；蓄力弹穿透杂兵
             if (enemy.hp <= 0) {
               enemy.alive = false;
-              state.score += 5;
-              scoreEl.textContent = state.score;
+              state.kills += 1;
+              addScore(5, ecx, ecy - 10, '#ffd86a');
               state.speed = Math.min(2.4, state.speed + 0.08);
               speedEl.textContent = state.speed.toFixed(1);
               const col = enemy.type === 'green' ? ['#5edc5e', '#ffffff']
@@ -1857,7 +2227,7 @@
                 : enemy.type === 'flyer' ? ['#c17cff', '#ffffff']
                 : ['#ff9a3c', '#ffffff'];
               spawnParticles(ecx, ecy, 18, { color: col, speedMin: 1.5, speedMax: 4.5, gravity: 0.18, life: 26, size: 3 });
-              if (state.score >= 55 && !state.boss) spawnBoss();
+              if (state.kills >= 11 && !state.boss) spawnBoss();
             }
           }
         });
@@ -1879,8 +2249,7 @@
             playBossHitSound();
             addShake(3, 4);
             if (state.boss.hp <= 0) {
-              state.score += 20;
-              scoreEl.textContent = state.score;
+              addScore(20, state.boss.x + state.boss.width / 2, state.boss.y + 20, '#ff9bd0');
               for (let i = 0; i < 48; i++) {
                 state.boss.particles.push({
                   x: state.boss.x + state.boss.width/2,
@@ -1901,12 +2270,13 @@
 
     /* ============================ 绘制 ============================ */
     function drawBackground() {
+      const TH = currentTheme();
       const horizon = canvasHeight - groundHeight;
       // 天空渐变
       const skyGradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
-      skyGradient.addColorStop(0, '#1c1248');
-      skyGradient.addColorStop(0.45, '#141c3e');
-      skyGradient.addColorStop(1, '#05060c');
+      skyGradient.addColorStop(0, TH.sky[0]);
+      skyGradient.addColorStop(0.45, TH.sky[1]);
+      skyGradient.addColorStop(1, TH.sky[2]);
       ctx.fillStyle = skyGradient;
       ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
@@ -1996,15 +2366,15 @@
 
       // 地面
       const groundGrad = ctx.createLinearGradient(0, horizon, 0, canvasHeight);
-      groundGrad.addColorStop(0, '#2f3a63');
-      groundGrad.addColorStop(0.5, '#1c2340');
-      groundGrad.addColorStop(1, '#0f1428');
+      groundGrad.addColorStop(0, TH.ground[0]);
+      groundGrad.addColorStop(0.5, TH.ground[1]);
+      groundGrad.addColorStop(1, TH.ground[2]);
       ctx.fillStyle = groundGrad;
       ctx.fillRect(0, horizon, canvasWidth, groundHeight);
       // 地平线发光
       ctx.save();
-      ctx.shadowBlur = 12; ctx.shadowColor = '#7fb0ff';
-      ctx.fillStyle = '#6a7cd0';
+      ctx.shadowBlur = 12; ctx.shadowColor = TH.accent;
+      ctx.fillStyle = TH.accent;
       ctx.fillRect(0, horizon, canvasWidth, 3);
       ctx.restore();
       ctx.fillStyle = 'rgba(160,200,255,0.6)';
@@ -2039,8 +2409,28 @@
       }
       ctx.globalAlpha = 1;
     }
+    // 落地冲击环绘制（椭圆扩散，贴地面）
+    function drawLandRings() {
+      if (!state.landRings || !state.landRings.length) return;
+      ctx.save();
+      for (const ring of state.landRings) {
+        const a = ring.alpha * ring.life; // life 0→1，由亮淡出
+        ctx.globalAlpha = Math.max(0, a);
+        ctx.strokeStyle = '#d0ddff';
+        ctx.lineWidth = 1.8 + (1 - ring.life) * 2;
+        ctx.shadowBlur = 6;
+        ctx.shadowColor = '#8eb4ff';
+        ctx.beginPath();
+        ctx.ellipse(ring.x, ring.y, ring.r, ring.r * 0.32, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
 
     function drawPlayer() {
+      const SK = currentSkin();
       const groundY = canvasHeight - groundHeight;
 
       // 影子（随高度缩放）
@@ -2059,7 +2449,7 @@
           const t = player.trail[i];
           ctx.save();
           ctx.globalAlpha = 0.12 * (1 - i / player.trail.length);
-          ctx.fillStyle = '#4fe3ff';
+          ctx.fillStyle = SK.glow;
           ctx.fillRect(t.x + 10, t.y + 8, player.width - 20, player.height - 10);
           ctx.restore();
         }
@@ -2083,13 +2473,13 @@
 
       // —— 围巾（双层 + 高光，多段飘动）——
       const sw = Math.sin(Date.now() * 0.015) * 3 + Math.abs(player.vx) * 0.8 + player.dy * 0.28;
-      ctx.fillStyle = '#c23a5a'; // 深色底
+      ctx.fillStyle = SK.scarfDark; // 深色底
       ctx.beginPath();
       ctx.moveTo(U(-2), -U(43));
       ctx.quadraticCurveTo(U(-18), -U(46) - sw, U(-30), -U(30) - sw * 1.4);
       ctx.quadraticCurveTo(U(-20), -U(31), U(-4), -U(37));
       ctx.closePath(); ctx.fill();
-      ctx.fillStyle = '#ff5d7a'; // 亮面
+      ctx.fillStyle = SK.scarf; // 亮面
       ctx.beginPath();
       ctx.moveTo(U(-2), -U(43));
       ctx.quadraticCurveTo(U(-16), -U(45) - sw, U(-26), -U(31) - sw * 1.3);
@@ -2115,9 +2505,9 @@
       ctx.fillRect(U(-10) - legOff, -U(10), U(3), U(2));
       ctx.fillRect(U(4) + legOff, -U(10), U(3), U(2));
       ctx.save();
-      ctx.shadowBlur = 10 * glow; ctx.shadowColor = '#4fe3ff';
+      ctx.shadowBlur = 10 * glow; ctx.shadowColor = SK.glow;
       const shoeG = ctx.createLinearGradient(0, -U(4), 0, 0);
-      shoeG.addColorStop(0, '#8df4ff'); shoeG.addColorStop(1, '#2aa8d8');
+      shoeG.addColorStop(0, SK.core); shoeG.addColorStop(1, '#2aa8d8');
       ctx.fillStyle = shoeG;
       ctx.fillRect(U(-12) - legOff, -U(4), U(11), U(4));
       ctx.fillRect(U(1) + legOff, -U(4), U(11), U(4));
@@ -2138,7 +2528,7 @@
       ctx.fillStyle = '#454f9e'; // 肩甲
       ctx.fillRect(U(-15), -U(40), U(5), U(9));
       ctx.fillRect(U(10), -U(40), U(5), U(9));
-      ctx.strokeStyle = `rgba(79,227,255,${glow})`; // 侧面能量线
+      ctx.strokeStyle = `rgba(${SK.glowRgb},${glow})`; // 侧面能量线
       ctx.lineWidth = Math.max(1, U(1));
       ctx.beginPath(); ctx.moveTo(U(-11), -U(38)); ctx.lineTo(U(-11), -U(20)); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(U(11), -U(38)); ctx.lineTo(U(11), -U(20)); ctx.stroke();
@@ -2146,18 +2536,18 @@
       // 能量核心（多层光晕 + 旋转环）
       const coreP = 0.7 + 0.3 * Math.sin(Date.now() * 0.01);
       ctx.save();
-      ctx.shadowBlur = 18; ctx.shadowColor = '#4fe3ff';
+      ctx.shadowBlur = 18; ctx.shadowColor = SK.glow;
       const coreG = ctx.createRadialGradient(0, -U(28), 0, 0, -U(28), U(7));
       coreG.addColorStop(0, '#ffffff');
       coreG.addColorStop(0.5, `rgba(140,240,255,${coreP})`);
-      coreG.addColorStop(1, 'rgba(79,227,255,0)');
+      coreG.addColorStop(1, `rgba(${SK.glowRgb},0)`);
       ctx.fillStyle = coreG;
       ctx.beginPath(); ctx.arc(0, -U(28), U(7), 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = `rgba(180,250,255,${0.6 * coreP})`;
       ctx.lineWidth = Math.max(1, U(1));
       ctx.beginPath(); ctx.ellipse(0, -U(28), U(6), U(2.4), Date.now() * 0.004, 0, Math.PI * 2); ctx.stroke();
       ctx.restore();
-      ctx.strokeStyle = `rgba(79,227,255,${0.5 * glow})`; // 整体发光描边
+      ctx.strokeStyle = `rgba(${SK.glowRgb},${0.5 * glow})`; // 整体发光描边
       ctx.lineWidth = Math.max(1, U(1.2));
       ctx.strokeRect(U(-13), -U(40), U(26), U(24));
 
@@ -2167,8 +2557,8 @@
       ctx.fillStyle = '#3a4680';
       ctx.fillRect(U(9), -U(38), U(6), U(4));
       ctx.save();
-      ctx.shadowBlur = 8 * glow; ctx.shadowColor = '#4fe3ff';
-      ctx.fillStyle = '#4fe3ff';
+      ctx.shadowBlur = 8 * glow; ctx.shadowColor = SK.glow;
+      ctx.fillStyle = SK.glow;
       ctx.fillRect(U(9), -U(24), U(6), U(3)); // 手套发光
       ctx.fillRect(U(9), -U(31), U(6), U(1.5)); // 手环
       ctx.restore();
@@ -2183,27 +2573,27 @@
       ctx.fillStyle = helmG;
       ctx.beginPath(); ctx.arc(0, -U(49), U(9.5), Math.PI, 0); ctx.fill();
       ctx.fillRect(U(-9.5), -U(50), U(19), U(4));
-      ctx.fillStyle = '#4fe3ff'; // 头盔中脊
+      ctx.fillStyle = SK.glow; // 头盔中脊
       ctx.fillRect(U(-1), -U(58), U(2), U(9));
       ctx.strokeStyle = 'rgba(10,14,30,0.5)';
       ctx.lineWidth = Math.max(1, U(1));
       ctx.beginPath(); ctx.moveTo(U(-9), -U(49)); ctx.lineTo(U(9), -U(49)); ctx.stroke();
       // 天线 + 发光点
-      ctx.strokeStyle = '#4fe3ff';
+      ctx.strokeStyle = SK.glow;
       ctx.lineWidth = Math.max(1, U(1.2));
       ctx.beginPath(); ctx.moveTo(U(5), -U(56)); ctx.lineTo(U(9), -U(64)); ctx.stroke();
       ctx.save();
-      ctx.shadowBlur = 12; ctx.shadowColor = '#4fe3ff';
-      ctx.fillStyle = '#8df4ff';
+      ctx.shadowBlur = 12; ctx.shadowColor = SK.glow;
+      ctx.fillStyle = SK.core;
       ctx.beginPath(); ctx.arc(U(9), -U(64), U(2.2), 0, Math.PI * 2); ctx.fill();
       ctx.restore();
       // 护目镜（渐变 + 高光反光）
       ctx.save();
-      ctx.shadowBlur = 12; ctx.shadowColor = '#4fe3ff';
+      ctx.shadowBlur = 12; ctx.shadowColor = SK.glow;
       ctx.fillStyle = '#0d1638';
       ctx.fillRect(U(-6.5), -U(51), U(14), U(6.5));
       const goG = ctx.createLinearGradient(U(-6), -U(50), U(7), -U(45));
-      goG.addColorStop(0, '#bffcff'); goG.addColorStop(0.5, '#4fe3ff'); goG.addColorStop(1, '#1aa0d0');
+      goG.addColorStop(0, '#bffcff'); goG.addColorStop(0.5, SK.glow); goG.addColorStop(1, '#1aa0d0');
       ctx.fillStyle = goG;
       ctx.fillRect(U(-5), -U(50), U(11), U(3.2));
       ctx.fillStyle = 'rgba(255,255,255,0.85)'; // 反光高光
@@ -2298,6 +2688,7 @@
       }
       // 天降坠落物（预警圈 + 陨石）
       if (state.stage === 1) drawFalling();
+      drawItems();
       // 平台
       if (state.stage === 2) {
         state.platforms.forEach(platform => {
@@ -2527,11 +2918,50 @@
         ctx.fillStyle = '#fff';
         ctx.font = '14px Arial';
         ctx.fillText('BOSS', boss.x + 36, boss.y + 18);
-        // 血条
-        ctx.fillStyle = 'rgba(0,0,0,0.4)';
-        ctx.fillRect(boss.x, boss.y - 12, boss.width, 8);
-        ctx.fillStyle = '#f77';
-        ctx.fillRect(boss.x, boss.y - 12, boss.width * (Math.max(0, boss.hp) / boss.maxHp), 8);
+        // 血条（分段格子）
+        const _bw = boss.width, _bx = boss.x, _by = boss.y - 16;
+        const _segs = boss.maxHp; // 每格 1 HP
+        const _segW = Math.floor(_bw / _segs);
+        const _barH = 10;
+        const _hpNow = Math.max(0, boss.hp);
+        ctx.save();
+        // 背景槽
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.beginPath();
+        ctx.roundRect(_bx - 1, _by - 1, _bw + 2, _barH + 2, 3);
+        ctx.fill();
+        for (let _si = 0; _si < _segs; _si++) {
+          const _sx = _bx + _si * _segW;
+          const _filled = _si < _hpNow;
+          // 每格颜色：HP > 50% 绿→橙，≤50% 橙→红
+          const _ratio = _hpNow / boss.maxHp;
+          let _fc;
+          if (_ratio > 0.6)      _fc = '#6dff88';
+          else if (_ratio > 0.3) _fc = '#ffb347';
+          else                   _fc = '#ff4455';
+          ctx.fillStyle = _filled ? _fc : 'rgba(255,255,255,0.08)';
+          ctx.fillRect(_sx + 1, _by, _segW - 2, _barH);
+          // 高光
+          if (_filled) {
+            ctx.fillStyle = 'rgba(255,255,255,0.22)';
+            ctx.fillRect(_sx + 1, _by, _segW - 2, 3);
+          }
+        }
+        // 外边框
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(_bx - 1, _by - 1, _bw + 2, _barH + 2, 3);
+        ctx.stroke();
+        // Boss 名牌
+        ctx.font = 'bold 11px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillText('BOSS  ' + _hpNow + ' / ' + boss.maxHp, _bx + _bw / 2 + 1, _by - 3);
+        ctx.fillStyle = '#ffccd5';
+        ctx.fillText('BOSS  ' + _hpNow + ' / ' + boss.maxHp, _bx + _bw / 2, _by - 4);
+        ctx.textAlign = 'left';
+        ctx.restore();
         // 受击闪白
         if (boss.hitTimer && boss.hitTimer > 0) {
           ctx.fillStyle = `rgba(255,255,255,${0.18 + boss.hitTimer / 24})`;
@@ -2592,7 +3022,9 @@
       }
 
       // 通用粒子（尘土/命中/爆裂）
+      drawLandRings();
       drawParticles();
+      drawFloatTexts();
 
       // 玩家
       drawPlayer();
@@ -2627,6 +3059,63 @@
       ctx.fillStyle = vig;
       ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
+      // 受伤红晕（边缘红色脉冲，hurt/shield-break 触发，30~55帧淡出）
+      if (state.hurtTimer > 0) {
+        const _ht = state.hurtTimer;
+        const _maxT = 55;
+        // 前几帧强闪，之后快速衰减
+        const _a = Math.pow(_ht / _maxT, 0.6) * 0.72;
+        const _rvig = ctx.createRadialGradient(
+          canvasWidth / 2, canvasHeight / 2, canvasHeight * 0.28,
+          canvasWidth / 2, canvasHeight / 2, canvasHeight * 0.9
+        );
+        _rvig.addColorStop(0, 'rgba(200,0,0,0)');
+        _rvig.addColorStop(0.55, `rgba(180,0,0,${(_a * 0.3).toFixed(3)})`);
+        _rvig.addColorStop(1, `rgba(220,0,0,${_a.toFixed(3)})`);
+        ctx.fillStyle = _rvig;
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+      }
+
+      // 连击 HUD（Canvas 固定位置，弹簧放大动画，combo ≥ 3 才显示）
+      if (state.combo >= 3 && state.comboTimer > 0) {
+        const _cx = canvasWidth - 16;
+        const _cy = 52;
+        const _sc = Math.max(0.5, state.comboScale);
+        const _fadeT = Math.min(1, state.comboTimer / 30); // 消失前30帧淡出
+        ctx.save();
+        ctx.globalAlpha = _fadeT;
+        ctx.translate(_cx, _cy);
+        ctx.scale(_sc, _sc);
+        // 背景胶囊
+        const _bgW = 74, _bgH = 34;
+        ctx.fillStyle = 'rgba(10,8,24,0.72)';
+        ctx.beginPath();
+        ctx.roundRect(-_bgW, -_bgH / 2, _bgW, _bgH, 8);
+        ctx.fill();
+        ctx.strokeStyle = state.combo >= 20 ? '#ff9bd0' : (state.combo >= 10 ? '#ffd86a' : '#8df4ff');
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(-_bgW, -_bgH / 2, _bgW, _bgH, 8);
+        ctx.stroke();
+        // 文字
+        ctx.textAlign = 'center';
+        const _comboColor = state.combo >= 20 ? '#ff9bd0' : (state.combo >= 10 ? '#ffd86a' : '#8df4ff');
+        ctx.font = `bold ${Math.round(18 + Math.min(state.combo, 30) * 0.25)}px Arial`;
+        ctx.fillStyle = _comboColor;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = _comboColor;
+        ctx.fillText('×' + state.combo + ' 连击', -_bgW / 2, 6);
+        ctx.shadowBlur = 0;
+        // 连击倍率标签
+        const _mult = 1 + Math.floor((state.combo - 1) / 8);
+        if (_mult >= 2) {
+          ctx.font = 'bold 10px Arial';
+          ctx.fillStyle = '#ffd86a';
+          ctx.fillText(_mult + 'x 倍率', -_bgW / 2, -10);
+        }
+        ctx.restore();
+      }
+
       // 开场动画特效（冲击波环 / GO! / 闪白）
       drawIntro();
 
@@ -2651,7 +3140,21 @@
       updatePlayerShots();
       updateEnemyShots();
       updateParticles();
+      updateFloatTexts();
+      if (state.comboTimer > 0) { state.comboTimer -= 1; if (state.comboTimer === 0) state.combo = 0; }
+      if (state.hurtTimer > 0) state.hurtTimer -= 1;
+      // 连击计数器弹簧物理（spring k=0.22, damp=0.68）
+      state.comboScaleVel += (1 - state.comboScale) * 0.22;
+      state.comboScaleVel *= 0.68;
+      state.comboScale += state.comboScaleVel;
+      updateLandRings();
       updateBackground();
+      updateItems();
+      if (state.doubleTimer > 0) state.doubleTimer -= 1;
+      if (!state.boss) {
+        state.itemTimer -= 1;
+        if (state.itemTimer <= 0) { spawnItem(); state.itemTimer = 420 + Math.random() * 240; }
+      }
       handleCollisions();
       if (!state.active) return; // 碰撞可能已结束游戏
 
@@ -2669,7 +3172,7 @@
             state.spawnTimer = state.spawnInterval;
           }
           state.spawnTimer -= 1 + state.speed * 0.2;
-          state.speed = Math.min(3.2, state.speed + 0.0012);
+          state.speed = Math.min(state.mode === 'endless' ? 6 : 3.2, state.speed + (state.mode === 'endless' ? 0.0018 : 0.0012));
           speedEl.textContent = state.speed.toFixed(1);
           // 天降坠落物：定期生成，需左右移动躲避
           state.fallTimer -= 1;
@@ -2720,12 +3223,31 @@
       requestAnimationFrame(gameLoop);
     }
 
+    /* ===== 暂停 / 恢复 ===== */
+    function pauseGame() {
+      if (!state.active || state.intro.active) return;
+      showMessage('⏸ 已暂停', '继续', 'paused');
+    }
+    function resumeGame() {
+      if (state.messageMode === 'paused') { hideMessage(); startLoop(); }
+    }
+    // 切后台 / 失焦自动暂停，避免空跑
+    window.addEventListener('blur', () => { if (state.active && !state.intro.active) pauseGame(); });
+    document.addEventListener('visibilitychange', () => { if (document.hidden && state.active && !state.intro.active) pauseGame(); });
+
     /* ============================ 事件 ============================ */
     window.addEventListener('keydown', event => {
       const code = event.code;
       // 片头期间任意键仅跳过片头，不直接开始游戏
       if (typeof splashActive !== 'undefined' && splashActive) { endSplash(); event.preventDefault(); return; }
       if (audioCtx.state === 'suspended') audioCtx.resume();
+      // 暂停 / 恢复
+      if (code === 'Escape' || code === 'KeyP') {
+        if (state.active && !state.intro.active) pauseGame();
+        else if (!state.active && state.messageMode === 'paused') resumeGame();
+        event.preventDefault();
+        return;
+      }
       if (code === 'Space' || code === 'KeyW') {
         if (state.active && !event.repeat) {
           player.jumpBuffer = player.jumpBufferMax;
@@ -2778,7 +3300,62 @@
       }
     });
 
-    /* ===== 触摸控制映射（手机） ===== */
+    // 暂停按钮（点击暂停 / 恢复）
+    const pauseBtn = document.getElementById('pauseBtn');
+    if (pauseBtn) {
+      pauseBtn.addEventListener('click', () => {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (state.active && !state.intro.active) pauseGame();
+        else if (!state.active && state.messageMode === 'paused') resumeGame();
+      });
+    }
+
+    // 设置面板
+    const settingsBtn = document.getElementById('settingsBtn');
+    const settingsPanel = document.getElementById('settingsPanel');
+    const volSlider = document.getElementById('volSlider');
+    const shakeToggle = document.getElementById('shakeToggle');
+    const flashToggle = document.getElementById('flashToggle');
+    const closeSettings = document.getElementById('closeSettings');
+    function syncSettingsUI() {
+      if (volSlider) volSlider.value = settings.volume;
+      if (shakeToggle) { shakeToggle.textContent = settings.shake ? '开' : '关'; shakeToggle.classList.toggle('off', !settings.shake); }
+      if (flashToggle) { flashToggle.textContent = settings.flash ? '开' : '关'; flashToggle.classList.toggle('off', !settings.flash); }
+      renderSkinPicker();
+      const achEl = document.getElementById('achCount');
+      if (achEl) achEl.textContent = getAchList().length + ' / ' + ACHIEVEMENTS.length;
+    }
+    if (settingsBtn) settingsBtn.addEventListener('click', () => {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      if (state.active && !state.intro.active) pauseGame(); // 打开设置时自动暂停
+      syncSettingsUI();
+      if (settingsPanel) settingsPanel.classList.add('show');
+    });
+    if (closeSettings) closeSettings.addEventListener('click', () => settingsPanel.classList.remove('show'));
+    if (volSlider) volSlider.addEventListener('input', () => {
+      settings.volume = Number(volSlider.value);
+      localStorage.setItem('jd_volume', settings.volume);
+      applySettings();
+    });
+    if (shakeToggle) shakeToggle.addEventListener('click', () => {
+      settings.shake = !settings.shake;
+      localStorage.setItem('jd_shake', settings.shake ? '1' : '0');
+      syncSettingsUI();
+    });
+    if (flashToggle) flashToggle.addEventListener('click', () => {
+      settings.flash = !settings.flash;
+      localStorage.setItem('jd_flash', settings.flash ? '1' : '0');
+      syncSettingsUI();
+    });
+    syncSettingsUI();
+
+    /* ===================================================================
+       触摸控制映射（手机）— 全面重写
+       方案：
+         左半屏  → 随落点浮动摇杆（X:左右移动，Y:上推跳/下推蹲）
+         右半屏  → 三分区全屏触控（上区跳、中区射、下区蹲）
+         多点并发：摇杆 + 右侧可同时按下，互不干扰
+    =================================================================== */
     function pressKey(code) {
       if (audioCtx.state === 'suspended') audioCtx.resume();
       if (code === 'Space') {
@@ -2807,114 +3384,289 @@
         state.keys[code] = false;
       }
     }
-    // ===== 全局多点触控（遍历所有触点，彻底防止按键卡死，支持同时移动+跳跃） =====
-    // 右侧动作按钮（跳 / 蹲 / 射）
-    const actionButtonDefs = [
-      { id: 'btnJump', code: 'Space' },
-      { id: 'btnCrouch', code: 'KeyS' },
-      { id: 'btnShoot', code: 'KeyJ' },
-    ];
-    let activeTouchCodes = new Set();
 
-    // 左侧虚拟摇杆
+    // ── DOM 元素引用 ──
     const joystick = document.getElementById('joystick');
-    const jbase = joystick ? joystick.querySelector('.jbase') : null;
-    const jknob = joystick ? joystick.querySelector('.jknob') : null;
-    let joyId = null, joyBaseX = 0, joyBaseY = 0;
-    const JOY_RANGE = 64, JOY_DEAD = 12;
+    const jknob    = joystick ? joystick.querySelector('.jknob') : null;
+    const touchOverlay   = document.getElementById('touchOverlay');
+    const touchHintCvs   = document.getElementById('touchHintCanvas');
+    const touchCtrlDiv   = document.getElementById('touchControls');
 
-    function showJoystick(bx, by, dx) {
-      if (!joystick) return;
-      joystick.style.display = 'block';
-      jbase.style.left = bx + 'px'; jbase.style.top = by + 'px';
-      jknob.style.left = (bx + dx) + 'px'; jknob.style.top = by + 'px';
+    // ── 摇杆参数 ──
+    const JOY_RANGE  = 48;   // 最大偏移像素
+    const JOY_DEAD_X = 10;   // X 轴死区
+    const JOY_DEAD_Y = 14;   // Y 轴死区（需要更明显的意图才触发跳/蹲）
+    const JOY_BASE_R = 65;   // 底座半径（px，CSS 130px/2）
+
+    // ── 状态变量 ──
+    let joyId   = null;     // 摇杆触点 identifier
+    let joyOriX = 0;        // 摇杆底座中心 clientX（落点时确定）
+    let joyOriY = 0;        // 摇杆底座中心 clientY
+    let rightIds = new Map(); // rightId → zone ('jump'|'shoot'|'crouch')
+    let activeRightCodes = new Set(); // 当前激活的右侧 action codes
+
+    // ── 右侧三分区边界（运行时计算，避免硬编码像素） ──
+    function getRightZones() {
+      const rect = (touchOverlay || document.getElementById('gameCanvas')).getBoundingClientRect();
+      const h = rect.height, top = rect.top;
+      return {
+        top: top,
+        jumpBottom:   top + h * 0.38,  // 上 38% → 跳
+        shootBottom:  top + h * 0.66,  // 中 28% → 射
+        crouchBottom: top + h,          // 下 34% → 蹲
+      };
     }
-    function hideJoystick() { if (joystick) joystick.style.display = 'none'; }
 
-    function processTouches(touchList) {
-      let hitControl = false;
-      const defs = actionButtonDefs.map(d => {
-        const el = document.getElementById(d.id);
-        return { code: d.code, el, rect: el.getBoundingClientRect() };
-      });
-      const pad = 22;
-      const btnNow = new Set();
-      let joyTouch = null;
+    function getZoneCode(clientY) {
+      const z = getRightZones();
+      if (clientY < z.jumpBottom)   return 'Space';
+      if (clientY < z.shootBottom)  return 'KeyJ';
+      return 'KeyS';
+    }
 
-      for (const t of touchList) {
-        // 已分配的摇杆触点：用 identifier 持续跟踪，不再受区域限制
-        if (t.identifier === joyId) { joyTouch = t; hitControl = true; continue; }
-        // 右侧动作按钮命中
-        let onButton = false;
-        for (const d of defs) {
-          if (t.clientX >= d.rect.left - pad && t.clientX <= d.rect.right + pad &&
-              t.clientY >= d.rect.top - pad && t.clientY <= d.rect.bottom + pad) {
-            btnNow.add(d.code); onButton = true; hitControl = true;
+    // ── 摇杆 knob 视觉更新（不用 transition，直接设置避免延迟） ──
+    function setKnob(dx, dy) {
+      if (jknob) jknob.style.transform = `translate(${dx}px, ${dy}px)`;
+    }
+
+    // ── 摇杆位置（随落点移动底座） ──
+    function moveJoystickBase(cx, cy) {
+      if (!joystick) return;
+      // cont：可交互区域（touchOverlay 或 canvas），用于限制摇杆范围
+      const cont  = (touchOverlay || document.getElementById('gameCanvas')).getBoundingClientRect();
+      // parent：joystick 实际父元素 gameContainer，用于计算 absolute 定位
+      const parentRect = (document.getElementById('gameContainer') || cont).getBoundingClientRect();
+      const clamX = Math.max(cont.left + JOY_BASE_R + 4, Math.min(cx, cont.left + cont.width * 0.5 - 4));
+      const clamY = Math.max(cont.top  + JOY_BASE_R + 4, Math.min(cy, cont.bottom - JOY_BASE_R - 4));
+      // joystick 用 transform:translate(-50%,-50%) 以中心点定位，left/top 指向中心
+      joystick.style.left = (clamX - parentRect.left) + 'px';
+      joystick.style.top  = (clamY - parentRect.top)  + 'px';
+      joyOriX = clamX;
+      joyOriY = clamY;
+    }
+
+    // ── 绘制右侧分区提示（半透明线条，绘制一次即可） ──
+    function drawTouchHint() {
+      if (!touchHintCvs) return;
+      // touchHintCvs 是 absolute in gameContainer，inset 已由 CSS+alignOverlay 设置
+      // 只需设置 canvas 分辨率与显示尺寸一致
+      const el = touchOverlay || document.getElementById('gameCanvas');
+      const rect = el.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      touchHintCvs.width  = Math.round(rect.width  * dpr);
+      touchHintCvs.height = Math.round(rect.height * dpr);
+      touchHintCvs.style.width  = rect.width  + 'px';
+      touchHintCvs.style.height = rect.height + 'px';
+      const c = touchHintCvs.getContext('2d');
+      // 用 CSS 尺寸（逻辑像素）作为绘图坐标空间，DPR 由 scale 处理
+      const w = rect.width, h = rect.height;
+      c.setTransform(dpr, 0, 0, dpr, 0, 0);   // 等同于 c.scale(dpr, dpr)，但更安全
+      c.clearRect(0, 0, w, h);
+      const lx = w * 0.5;  // 左右分界线
+
+      // 左右分界虚线
+      c.setLineDash([6, 8]);
+      c.strokeStyle = 'rgba(120,220,255,0.18)';
+      c.lineWidth = 1.5;
+      c.beginPath(); c.moveTo(lx, 0); c.lineTo(lx, h); c.stroke();
+
+      // 右侧分区横线
+      const y1 = h * 0.38, y2 = h * 0.66;
+      c.setLineDash([4, 10]);
+      c.strokeStyle = 'rgba(120,220,255,0.14)';
+      c.beginPath(); c.moveTo(lx, y1); c.lineTo(w, y1); c.stroke();
+      c.beginPath(); c.moveTo(lx, y2); c.lineTo(w, y2); c.stroke();
+
+      // 右侧区域标签文字
+      c.setLineDash([]);
+      c.font = 'bold 20px sans-serif';
+      c.textAlign = 'right';
+      c.fillStyle = 'rgba(160,240,255,0.28)';
+      c.fillText('▲ 跳', w - 14, y1 * 0.52);
+      c.fillText('✦ 射', w - 14, (y1 + y2) / 2 + 8);
+      c.fillText('▼ 蹲', w - 14, (y2 + h) / 2 + 8);
+
+      // 左侧摇杆提示圆圈（淡淡的）
+      c.strokeStyle = 'rgba(120,220,255,0.12)';
+      c.lineWidth = 1.5;
+      c.setLineDash([]);
+      c.beginPath();
+      c.arc(lx * 0.5, h * 0.72, JOY_BASE_R, 0, Math.PI * 2);
+      c.stroke();
+      c.font = '13px sans-serif';
+      c.textAlign = 'center';
+      c.fillStyle = 'rgba(160,240,255,0.2)';
+      c.fillText('移动', lx * 0.5, h * 0.72 + JOY_BASE_R + 18);
+    }
+
+    // ── 核心触控处理 ──
+    // activeTouches : 当前屏上所有触点（e.touches，用于 move）
+    // changedTouches: 本次事件变化的触点（e.changedTouches，touchend 时用来检测离开）
+    // eventType     : 'start' | 'move' | 'end' | 'cancel'
+    function processTouches(activeTouches, changedTouches, eventType) {
+      const contRect = (touchOverlay || document.getElementById('gameCanvas')).getBoundingClientRect();
+      const midX = contRect.left + contRect.width * 0.5;
+
+      // ── 1. 处理 touchend / touchcancel：先清理离开的触点 ──
+      if (eventType === 'end' || eventType === 'cancel') {
+        for (const t of changedTouches) {
+          // 摇杆触点离开
+          if (t.identifier === joyId) {
+            joyId = null;
+            state.keys.KeyA = false; state.keys.KeyD = false;
+            state.keys.KeyS = false;
+            state.keys.Space = false; player.jumpHeld = false;
+            setKnob(0, 0);
+            if (joystick) {
+              joystick.style.opacity = '0';
+              setTimeout(() => { if (joyId === null) joystick.style.display = 'none'; }, 150);
+            }
+          }
+          // 右侧触点离开
+          if (rightIds.has(t.identifier)) {
+            const code = rightIds.get(t.identifier);
+            rightIds.delete(t.identifier);
+            // 只有没有其他触点持有同一 code 时才释放
+            const stillHeld = [...rightIds.values()].some(v => v === code);
+            if (!stillHeld) { releaseKey(code); activeRightCodes.delete(code); }
           }
         }
-        if (onButton) continue;
-        // 左半屏空白处按下 → 激活摇杆
-        if (joyId === null && t.clientX < window.innerWidth * 0.5) {
-          joyId = t.identifier; joyBaseX = t.clientX; joyBaseY = t.clientY;
-          joyTouch = t; hitControl = true;
+        return;  // end/cancel 不再处理移动逻辑
+      }
+
+      // ── 2. touchstart / touchmove：处理活跃触点 ──
+      for (const t of activeTouches) {
+        const isLeft  = t.clientX < midX;
+        const isRight = !isLeft;
+
+        // ── 摇杆触点（已绑定）─ 更新偏移 ──
+        if (t.identifier === joyId) {
+          let dx = t.clientX - joyOriX;
+          let dy = t.clientY - joyOriY;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          if (dist > JOY_RANGE) { dx *= JOY_RANGE/dist; dy *= JOY_RANGE/dist; }
+          setKnob(dx, dy);
+          state.keys.KeyA = dx < -JOY_DEAD_X;
+          state.keys.KeyD = dx >  JOY_DEAD_X;
+          // Y 轴：上推跳，下推蹲（仅当垂直意图明显时，避免斜向误触）
+          const absX = Math.abs(dx), absY = Math.abs(dy);
+          if (absY > JOY_DEAD_Y && absY > absX * 0.7) {
+            if (dy < 0) {
+              // 上推 → 跳
+              if (!state.keys.Space) { pressKey('Space'); }
+              else { player.jumpHeld = true; }
+            } else {
+              // 下推 → 蹲，同时确保不在跳跃状态
+              state.keys.KeyS = true;
+              if (state.keys.Space) { state.keys.Space = false; player.jumpHeld = false; }
+            }
+          } else {
+            // Y 在死区：释放摇杆产生的跳/蹲（仅释放由摇杆管理的；右侧触点的 Space 不影响）
+            if (state.keys.Space && !activeRightCodes.has('Space')) {
+              state.keys.Space = false; player.jumpHeld = false;
+            }
+            if (state.keys.KeyS && !activeRightCodes.has('KeyS')) {
+              state.keys.KeyS = false;
+            }
+          }
+          continue;
+        }
+
+        // ── 右侧已绑定触点 → 检测跨区滑动 ──
+        if (isRight && rightIds.has(t.identifier)) {
+          const oldCode = rightIds.get(t.identifier);
+          const newCode = getZoneCode(t.clientY);
+          if (newCode !== oldCode) {
+            rightIds.set(t.identifier, newCode);
+            // 释放旧 code（如无其他触点持有）
+            const oldStillHeld = [...rightIds.values()].some(v => v === oldCode);
+            if (!oldStillHeld) { releaseKey(oldCode); activeRightCodes.delete(oldCode); }
+            // 激活新 code
+            if (!activeRightCodes.has(newCode)) { pressKey(newCode); activeRightCodes.add(newCode); }
+          }
+          continue;
+        }
+
+        // ── 右侧新触点 → 绑定 zone ──
+        if (isRight && !rightIds.has(t.identifier)) {
+          const code = getZoneCode(t.clientY);
+          rightIds.set(t.identifier, code);
+          if (!activeRightCodes.has(code)) { pressKey(code); activeRightCodes.add(code); }
+          continue;
+        }
+
+        // ── 左侧新触点 → 创建摇杆（如当前无摇杆触点） ──
+        if (isLeft && joyId === null) {
+          joyId = t.identifier;
+          moveJoystickBase(t.clientX, t.clientY);
+          if (joystick) { joystick.style.display = 'block'; joystick.style.opacity = '1'; }
+          setKnob(0, 0);
+          continue;
         }
       }
 
-      // 摇杆状态
-      if (joyTouch) {
-        let dx = joyTouch.clientX - joyBaseX;
-        dx = Math.max(-JOY_RANGE, Math.min(JOY_RANGE, dx));
-        state.keys.KeyA = dx < -JOY_DEAD;
-        state.keys.KeyD = dx > JOY_DEAD;
-        showJoystick(joyBaseX, joyBaseY, dx);
-      } else if (joyId !== null) {
-        joyId = null;
-        state.keys.KeyA = false; state.keys.KeyD = false;
-        hideJoystick();
+      // ── 3. jumpHeld 持续维护（只要 Space 处于激活状态就保持） ──
+      if (activeRightCodes.has('Space') || (joyId !== null && state.keys.Space)) {
+        player.jumpHeld = true;
       }
-
-      // 右侧按钮 按下/松开 差异处理
-      for (const c of btnNow) {
-        if (!activeTouchCodes.has(c)) {
-          pressKey(c);
-          const def = actionButtonDefs.find(d => d.code === c);
-          if (def) document.getElementById(def.id).classList.add('active');
-        }
-      }
-      for (const c of activeTouchCodes) {
-        if (!btnNow.has(c)) {
-          releaseKey(c);
-          const def = actionButtonDefs.find(d => d.code === c);
-          if (def) document.getElementById(def.id).classList.remove('active');
-        }
-      }
-      activeTouchCodes = btnNow;
-      return hitControl;
     }
 
+    // ── 事件监听 ──
     function onTouch(e) {
-      const hit = processTouches(e.touches);
-      if (hit) e.preventDefault();
+      e.preventDefault();
+      const isEnd = e.type === 'touchend' || e.type === 'touchcancel';
+      const type  = isEnd ? (e.type === 'touchcancel' ? 'cancel' : 'end') : (e.type === 'touchstart' ? 'start' : 'move');
+      // end/cancel 时用 changedTouches 检测离开的触点，其余情况用 e.touches
+      processTouches(e.touches, e.changedTouches, type);
     }
-    document.addEventListener('touchstart', onTouch, { passive: false });
-    document.addEventListener('touchmove', onTouch, { passive: false });
-    document.addEventListener('touchend', onTouch, { passive: false });
-    document.addEventListener('touchcancel', onTouch, { passive: false });
+    if (touchOverlay) {
+      touchOverlay.addEventListener('touchstart',  onTouch, { passive: false });
+      touchOverlay.addEventListener('touchmove',   onTouch, { passive: false });
+      touchOverlay.addEventListener('touchend',    onTouch, { passive: false });
+      touchOverlay.addEventListener('touchcancel', onTouch, { passive: false });
+    }
+    // 兜底：游戏画布上的触控也捕获（防止 overlay 未覆盖）
+    canvas.addEventListener('touchstart',  onTouch, { passive: false });
+    canvas.addEventListener('touchmove',   onTouch, { passive: false });
+    canvas.addEventListener('touchend',    onTouch, { passive: false });
+    canvas.addEventListener('touchcancel', onTouch, { passive: false });
 
     function isMobileLike() {
       return ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
     }
-    // 竖屏时提示横屏（JS 实时判断，兼容开发者工具的手机模拟，任意机型都生效）
     function checkOrientation() {
       const portrait = window.innerHeight > window.innerWidth;
       const hint = document.getElementById('rotateHint');
       if (hint) hint.style.display = (isMobileLike() && portrait) ? 'flex' : 'none';
     }
-    window.addEventListener('resize', checkOrientation);
-    window.addEventListener('orientationchange', checkOrientation);
+    window.addEventListener('resize', () => { checkOrientation(); if (isMobileLike()) drawTouchHint(); });
+    window.addEventListener('orientationchange', () => { checkOrientation(); setTimeout(drawTouchHint, 300); });
 
     if (isMobileLike()) {
-      document.getElementById('touchControls').style.display = 'flex';
+      // 动态对齐 overlay top 至 canvas 顶部（HUD 之下）
+      function alignOverlay() {
+        const cvs = document.getElementById('gameCanvas');
+        const cont = document.getElementById('gameContainer');
+        if (cvs && cont) {
+          const cvsRect  = cvs.getBoundingClientRect();
+          const contRect = cont.getBoundingClientRect();
+          const topOff   = cvsRect.top - contRect.top;
+          const topPx    = topOff + 'px';
+          if (touchOverlay) { touchOverlay.style.top = topPx; }
+          if (touchHintCvs) { touchHintCvs.style.top = topPx; }
+          if (touchCtrlDiv) { touchCtrlDiv.style.top  = topPx; }
+        }
+      }
+      // 显示触控层和提示
+      if (touchOverlay)  touchOverlay.style.display  = 'block';
+      if (touchHintCvs)  touchHintCvs.style.display  = 'block';
+      if (touchCtrlDiv)  touchCtrlDiv.style.display   = 'block';
+      // 摇杆初始隐藏，按下左半屏时才浮现
+      if (joystick) { joystick.style.display = 'none'; joystick.style.opacity = '0'; }
+      // 等布局稳定后对齐，并绘制分区提示
+      setTimeout(() => { alignOverlay(); drawTouchHint(); }, 200);
+      window.addEventListener('resize', () => { alignOverlay(); drawTouchHint(); });
+      window.addEventListener('orientationchange', () => { setTimeout(() => { alignOverlay(); drawTouchHint(); }, 350); });
     }
     checkOrientation();
 
@@ -2937,8 +3689,22 @@
       setTimeout(endSplash, 2300); // 片头播完自动进入开始界面
     }
 
+    // 模式选择（剧情 / 无尽）
+    const btnStory = document.getElementById('btnStory');
+    const btnEndless = document.getElementById('btnEndless');
+    function startMode(m) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      state.mode = m;
+      state.obstaclesToPass = (m === 'endless') ? Infinity : 55;
+      const pg = document.getElementById('progress'); if (pg) pg.style.display = (m === 'endless') ? 'none' : 'block';
+      enterPlay();
+    }
+    if (btnStory) btnStory.addEventListener('click', () => startMode('story'));
+    if (btnEndless) btnEndless.addEventListener('click', () => startMode('endless'));
+
     initBackground();
     resetGame();
+    renderSkinPicker();
   </script>
 </body>
 </html>
