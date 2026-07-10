@@ -149,7 +149,10 @@
       opacity: 0;
       pointer-events: none;
       transition: opacity 0.6s ease;
-      z-index: 9;
+      /* z-index 需高于 touchOverlay(14)/joystick(16)/touchControls(15)，
+         否则手机端触控层会盖住开始/结算界面按钮，导致无法点击模式选择/继续。
+         低于 settingsBtn(22) 与 settingsPanel(30)，保证设置始终可用。 */
+      z-index: 20;
     }
     #message.show { opacity: 1; pointer-events: auto; }
 
@@ -3331,7 +3334,11 @@
       syncSettingsUI();
       if (settingsPanel) settingsPanel.classList.add('show');
     });
-    if (closeSettings) closeSettings.addEventListener('click', () => settingsPanel.classList.remove('show'));
+    if (closeSettings) closeSettings.addEventListener('click', () => {
+      settingsPanel.classList.remove('show');
+      // 若打开设置时曾自动暂停，则关闭设置后自动恢复游戏，避免卡在“已暂停”界面
+      if (state.messageMode === 'paused') resumeGame();
+    });
     if (volSlider) volSlider.addEventListener('input', () => {
       settings.volume = Number(volSlider.value);
       localStorage.setItem('jd_volume', settings.volume);
@@ -3596,7 +3603,8 @@
         }
 
         // ── 左侧新触点 → 创建摇杆（如当前无摇杆触点） ──
-        if (isLeft && joyId === null) {
+        // 排除已绑定为右侧按键的触点：防止右侧手指滑到左半屏时被误建成摇杆
+        if (isLeft && joyId === null && !rightIds.has(t.identifier)) {
           joyId = t.identifier;
           moveJoystickBase(t.clientX, t.clientY);
           if (joystick) { joystick.style.display = 'block'; joystick.style.opacity = '1'; }
