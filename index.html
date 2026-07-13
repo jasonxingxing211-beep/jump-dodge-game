@@ -3414,7 +3414,7 @@
 
     // ── 右侧三分区边界（运行时计算，避免硬编码像素） ──
     function getRightZones() {
-      const rect = (touchOverlay || document.getElementById('gameCanvas')).getBoundingClientRect();
+      const rect = canvas.getBoundingClientRect();
       const h = rect.height, top = rect.top;
       return {
         top: top,
@@ -3440,7 +3440,7 @@
     function moveJoystickBase(cx, cy) {
       if (!joystick) return;
       // cont：可交互区域（touchOverlay 或 canvas），用于限制摇杆范围
-      const cont  = (touchOverlay || document.getElementById('gameCanvas')).getBoundingClientRect();
+      const cont  = canvas.getBoundingClientRect();
       // parent：joystick 实际父元素 gameContainer，用于计算 absolute 定位
       const parentRect = (document.getElementById('gameContainer') || cont).getBoundingClientRect();
       const clamX = Math.max(cont.left + JOY_BASE_R + 4, Math.min(cx, cont.left + cont.width * 0.5 - 4));
@@ -3455,10 +3455,8 @@
     // ── 绘制右侧分区提示（半透明线条，绘制一次即可） ──
     function drawTouchHint() {
       if (!touchHintCvs) return;
-      // touchHintCvs 是 absolute in gameContainer，inset 已由 CSS+alignOverlay 设置
-      // 只需设置 canvas 分辨率与显示尺寸一致
-      const el = touchOverlay || document.getElementById('gameCanvas');
-      const rect = el.getBoundingClientRect();
+      // 以 canvas（实际游戏画面）为基准，保证提示线与触控分区完全一致
+      const rect = canvas.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
       touchHintCvs.width  = Math.round(rect.width  * dpr);
       touchHintCvs.height = Math.round(rect.height * dpr);
@@ -3511,7 +3509,7 @@
     // changedTouches: 本次事件变化的触点（e.changedTouches，touchend 时用来检测离开）
     // eventType     : 'start' | 'move' | 'end' | 'cancel'
     function processTouches(activeTouches, changedTouches, eventType) {
-      const contRect = (touchOverlay || document.getElementById('gameCanvas')).getBoundingClientRect();
+      const contRect = canvas.getBoundingClientRect();
       const midX = contRect.left + contRect.width * 0.5;
 
       // ── 1. 处理 touchend / touchcancel：先清理离开的触点 ──
@@ -3651,19 +3649,26 @@
     window.addEventListener('orientationchange', () => { checkOrientation(); setTimeout(drawTouchHint, 300); });
 
     if (isMobileLike()) {
-      // 动态对齐 overlay top 至 canvas 顶部（HUD 之下）
+      // 精确对齐触控层至 canvas 的实际位置与尺寸（相对 gameContainer）
+      // 不再用 left:0/right:0/bottom:0 全屏，避免横屏 flex 居中时与 canvas 错位
       function alignOverlay() {
-        const cvs = document.getElementById('gameCanvas');
         const cont = document.getElementById('gameContainer');
-        if (cvs && cont) {
-          const cvsRect  = cvs.getBoundingClientRect();
-          const contRect = cont.getBoundingClientRect();
-          const topOff   = cvsRect.top - contRect.top;
-          const topPx    = topOff + 'px';
-          if (touchOverlay) { touchOverlay.style.top = topPx; }
-          if (touchHintCvs) { touchHintCvs.style.top = topPx; }
-          if (touchCtrlDiv) { touchCtrlDiv.style.top  = topPx; }
-        }
+        if (!canvas || !cont) return;
+        const c = canvas.getBoundingClientRect();
+        const p = cont.getBoundingClientRect();
+        const left = (c.left - p.left) + 'px';
+        const top  = (c.top  - p.top)  + 'px';
+        const w = c.width  + 'px';
+        const h = c.height + 'px';
+        [touchOverlay, touchHintCvs, touchCtrlDiv].forEach(el => {
+          if (!el) return;
+          el.style.left = left;
+          el.style.top = top;
+          el.style.width = w;
+          el.style.height = h;
+          el.style.right = 'auto';
+          el.style.bottom = 'auto';
+        });
       }
       // 显示触控层和提示
       if (touchOverlay)  touchOverlay.style.display  = 'block';
@@ -3671,10 +3676,15 @@
       if (touchCtrlDiv)  touchCtrlDiv.style.display   = 'block';
       // 摇杆初始隐藏，按下左半屏时才浮现
       if (joystick) { joystick.style.display = 'none'; joystick.style.opacity = '0'; }
-      // 等布局稳定后对齐，并绘制分区提示
-      setTimeout(() => { alignOverlay(); drawTouchHint(); }, 200);
-      window.addEventListener('resize', () => { alignOverlay(); drawTouchHint(); });
-      window.addEventListener('orientationchange', () => { setTimeout(() => { alignOverlay(); drawTouchHint(); }, 350); });
+      // 多次对齐，确保布局稳定后触控层精确覆盖 canvas（应对字体/转屏导致的迟到布局）
+      const _realign = () => { alignOverlay(); drawTouchHint(); };
+      _realign();
+      setTimeout(_realign, 60);
+      setTimeout(_realign, 300);
+      setTimeout(_realign, 800);
+      window.addEventListener('load', _realign);
+      window.addEventListener('resize', _realign);
+      window.addEventListener('orientationchange', () => { setTimeout(_realign, 350); });
     }
     checkOrientation();
 
