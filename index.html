@@ -3814,7 +3814,8 @@
             'cvsShow ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' @' + Math.round(r.left) + ',' + Math.round(r.top) + '\n' +
             'active=' + state.active + ' intro=' + state.intro.active + ' stg' + state.stage + ' mode=' + state.messageMode + '\n' +
             'draws=' + window.__drawCount + ' mob=' + mob + ' px=' + Math.round(player.x) + ',' + Math.round(player.y) + '\n' +
-            'cvsPix ' + cpix + '  top=' + topEl;
+            'cvsPix ' + cpix + '  top=' + topEl + '\n' +
+            'msg[' + message.className + '] op=' + getComputedStyle(message).opacity + ' pe=' + getComputedStyle(message).pointerEvents;
         } catch (e) { p.textContent = 'diag err: ' + e.message; }
       }, 400);
     })();
