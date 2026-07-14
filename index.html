@@ -2663,6 +2663,7 @@
     }
 
     function drawScene() {
+      window.__drawCount = (window.__drawCount || 0) + 1;
       ctx.save();
       // 屏幕震动
       if (state.shakeTimer && state.shakeTimer > 0) {
@@ -3779,6 +3780,31 @@
     initBackground();
     resetGame();
     renderSkinPicker();
+
+    // 【临时诊断面板】显示 canvas 实际尺寸/位置/状态，定位手机端黑屏问题（确认后移除）
+    (function () {
+      const p = document.createElement('div');
+      p.id = '__diag';
+      p.style.cssText = 'position:fixed;top:0;left:0;z-index:99998;background:rgba(0,20,0,0.82);color:#4f4;font:10px/1.35 monospace;padding:4px 6px;white-space:pre;pointer-events:none;border:1px solid #0a0;';
+      document.body.appendChild(p);
+      let frames = 0, lastDraw = 0;
+      const _origDraw = typeof drawScene === 'function' ? drawScene : null;
+      window.__drawCount = 0;
+      setInterval(function () {
+        try {
+          const r = canvas.getBoundingClientRect();
+          const cont = document.getElementById('gameContainer').getBoundingClientRect();
+          const mob = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+          p.textContent =
+            'win ' + window.innerWidth + 'x' + window.innerHeight + ' dpr' + window.devicePixelRatio + '\n' +
+            'cont ' + Math.round(cont.width) + 'x' + Math.round(cont.height) + '\n' +
+            'cvsBuf ' + canvas.width + 'x' + canvas.height + '\n' +
+            'cvsShow ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' @' + Math.round(r.left) + ',' + Math.round(r.top) + '\n' +
+            'active=' + state.active + ' intro=' + state.intro.active + ' stg' + state.stage + ' mode=' + state.messageMode + '\n' +
+            'draws=' + window.__drawCount + ' mob=' + mob + ' px=' + Math.round(player.x) + ',' + Math.round(player.y);
+        } catch (e) { p.textContent = 'diag err: ' + e.message; }
+      }, 400);
+    })();
   </script>
 </body>
 </html>
