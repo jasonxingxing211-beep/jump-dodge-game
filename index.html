@@ -3795,13 +3795,26 @@
           const r = canvas.getBoundingClientRect();
           const cont = document.getElementById('gameContainer').getBoundingClientRect();
           const mob = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+          // 读取 canvas 中心像素，判定缓冲区是否真的画了内容
+          let cpix = '?';
+          try {
+            const id = ctx.getImageData(canvas.width >> 1, canvas.height >> 1, 1, 1).data;
+            cpix = id[0] + ',' + id[1] + ',' + id[2] + ',' + id[3];
+          } catch (e) { cpix = 'ERR:' + (e.message || e.name); }
+          // 读取 canvas 上层是否被遮挡：取 canvas 中心屏幕坐标处最顶层元素
+          let topEl = '?';
+          try {
+            const el = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
+            topEl = el ? (el.id || el.tagName) : 'null';
+          } catch (e) { topEl = 'ERR'; }
           p.textContent =
             'win ' + window.innerWidth + 'x' + window.innerHeight + ' dpr' + window.devicePixelRatio + '\n' +
             'cont ' + Math.round(cont.width) + 'x' + Math.round(cont.height) + '\n' +
             'cvsBuf ' + canvas.width + 'x' + canvas.height + '\n' +
             'cvsShow ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' @' + Math.round(r.left) + ',' + Math.round(r.top) + '\n' +
             'active=' + state.active + ' intro=' + state.intro.active + ' stg' + state.stage + ' mode=' + state.messageMode + '\n' +
-            'draws=' + window.__drawCount + ' mob=' + mob + ' px=' + Math.round(player.x) + ',' + Math.round(player.y);
+            'draws=' + window.__drawCount + ' mob=' + mob + ' px=' + Math.round(player.x) + ',' + Math.round(player.y) + '\n' +
+            'cvsPix ' + cpix + '  top=' + topEl;
         } catch (e) { p.textContent = 'diag err: ' + e.message; }
       }, 400);
     })();
