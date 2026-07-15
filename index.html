@@ -1210,6 +1210,9 @@
     function showMessage(text, buttonText = '继续', mode = 'info') {
       messageText.textContent = text;
       restartButton.textContent = buttonText;
+      // 清除 drawScene 运行时施加的强制隐藏 inline 样式，让遮罩能正常显示（由 class 控制）
+      message.style.opacity = '';
+      message.style.pointerEvents = '';
       // 片头进行中时先不显示，交给片头结束后浮现，实现“渐渐浮现”
       if (!(typeof splashActive !== 'undefined' && splashActive)) {
         message.classList.add('show');
@@ -2651,8 +2654,15 @@
     }
 
     function drawScene() {
-      // 游戏运行中（active）时，开始/片头遮罩不应显示，强制隐藏避免遮住画面
-      if (state.active && message.classList.contains('show')) message.classList.remove('show');
+      // 游戏运行中（active）时，开始/片头遮罩绝不应显示。用最高优先级的 inline 样式强制隐藏，
+      // 绕过任何 class 状态 / 延迟回调 / 手机端异常，确保画面永远不会被遮罩盖住变黑。
+      if (state.active) {
+        message.classList.remove('show');
+        if (message.style.opacity !== '0') {
+          message.style.opacity = '0';
+          message.style.pointerEvents = 'none';
+        }
+      }
       ctx.save();
       // 屏幕震动
       if (state.shakeTimer && state.shakeTimer > 0) {
@@ -3280,8 +3290,13 @@
     function resumeGame() {
       if (state.messageMode === 'paused') { hideMessage(); startLoop(); }
     }
-    // 切后台 / 失焦自动暂停，避免空跑
-    window.addEventListener('blur', () => { if (state.active && !state.intro.active) pauseGame(); });
+    // 切后台自动暂停，避免空跑
+    // 注意：blur 仅在【桌面端】启用。手机端 blur 过于敏感（点击、地址栏、系统手势、软键盘都会触发），
+    // 一进游戏就可能被误暂停，弹出暂停遮罩，表现为"进游戏后画面变黑"。手机端改用 visibilitychange（真正切后台才暂停）。
+    const _isTouchDev = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    if (!_isTouchDev) {
+      window.addEventListener('blur', () => { if (state.active && !state.intro.active) pauseGame(); });
+    }
     document.addEventListener('visibilitychange', () => { if (document.hidden && state.active && !state.intro.active) pauseGame(); });
 
     /* ============================ 事件 ============================ */
