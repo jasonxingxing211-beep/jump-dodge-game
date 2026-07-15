@@ -406,18 +406,6 @@
   </div>
 
   <script>
-    // 【临时诊断】把运行时错误显示到屏幕底部，便于在手机上定位问题（确认后可移除）
-    window.addEventListener('error', function (e) {
-      var d = document.getElementById('__errbar');
-      if (!d) {
-        d = document.createElement('div');
-        d.id = '__errbar';
-        d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:99999;background:rgba(190,0,0,0.92);color:#fff;font:12px/1.4 monospace;padding:6px 8px;word-break:break-all;white-space:pre-wrap;';
-        document.body.appendChild(d);
-      }
-      d.textContent = 'JS错误: ' + (e.message || '') + '\n@ ' + ((e.filename || '').split('/').pop()) + ':' + e.lineno + ':' + e.colno;
-    });
-
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const scoreEl = document.getElementById('score');
@@ -2663,8 +2651,7 @@
     }
 
     function drawScene() {
-      window.__drawCount = (window.__drawCount || 0) + 1;
-      // 兜底：游戏运行中（active）时，开始/片头遮罩不应显示，强制隐藏避免遮住画面
+      // 游戏运行中（active）时，开始/片头遮罩不应显示，强制隐藏避免遮住画面
       if (state.active && message.classList.contains('show')) message.classList.remove('show');
       ctx.save();
       // 屏幕震动
@@ -3782,45 +3769,6 @@
     initBackground();
     resetGame();
     renderSkinPicker();
-
-    // 【临时诊断面板】显示 canvas 实际尺寸/位置/状态，定位手机端黑屏问题（确认后移除）
-    (function () {
-      const p = document.createElement('div');
-      p.id = '__diag';
-      p.style.cssText = 'position:fixed;top:0;left:0;z-index:99998;background:rgba(0,20,0,0.82);color:#4f4;font:10px/1.35 monospace;padding:4px 6px;white-space:pre;pointer-events:none;border:1px solid #0a0;';
-      document.body.appendChild(p);
-      let frames = 0, lastDraw = 0;
-      const _origDraw = typeof drawScene === 'function' ? drawScene : null;
-      window.__drawCount = 0;
-      setInterval(function () {
-        try {
-          const r = canvas.getBoundingClientRect();
-          const cont = document.getElementById('gameContainer').getBoundingClientRect();
-          const mob = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
-          // 读取 canvas 中心像素，判定缓冲区是否真的画了内容
-          let cpix = '?';
-          try {
-            const id = ctx.getImageData(canvas.width >> 1, canvas.height >> 1, 1, 1).data;
-            cpix = id[0] + ',' + id[1] + ',' + id[2] + ',' + id[3];
-          } catch (e) { cpix = 'ERR:' + (e.message || e.name); }
-          // 读取 canvas 上层是否被遮挡：取 canvas 中心屏幕坐标处最顶层元素
-          let topEl = '?';
-          try {
-            const el = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
-            topEl = el ? (el.id || el.tagName) : 'null';
-          } catch (e) { topEl = 'ERR'; }
-          p.textContent =
-            'win ' + window.innerWidth + 'x' + window.innerHeight + ' dpr' + window.devicePixelRatio + '\n' +
-            'cont ' + Math.round(cont.width) + 'x' + Math.round(cont.height) + '\n' +
-            'cvsBuf ' + canvas.width + 'x' + canvas.height + '\n' +
-            'cvsShow ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' @' + Math.round(r.left) + ',' + Math.round(r.top) + '\n' +
-            'active=' + state.active + ' intro=' + state.intro.active + ' stg' + state.stage + ' mode=' + state.messageMode + '\n' +
-            'draws=' + window.__drawCount + ' mob=' + mob + ' px=' + Math.round(player.x) + ',' + Math.round(player.y) + '\n' +
-            'cvsPix ' + cpix + '  top=' + topEl + '\n' +
-            'msg[' + message.className + '] op=' + getComputedStyle(message).opacity + ' pe=' + getComputedStyle(message).pointerEvents;
-        } catch (e) { p.textContent = 'diag err: ' + e.message; }
-      }, 400);
-    })();
   </script>
 </body>
 </html>
