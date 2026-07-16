@@ -3795,15 +3795,22 @@
         try {
           const r = canvas.getBoundingClientRect();
           const cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
-          let pix = '?';
-          try { const d = ctx.getImageData(canvas.width >> 1, canvas.height >> 1, 1, 1).data; pix = d[0] + ',' + d[1] + ',' + d[2]; } catch (e) { pix = 'e'; }
+          let pix = '?', bright = 0, tot = 0;
+          try {
+            const img = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+            const mid = ((canvas.height >> 1) * canvas.width + (canvas.width >> 1)) * 4;
+            pix = img[mid] + ',' + img[mid + 1] + ',' + img[mid + 2];
+            for (let i = 0; i < img.length; i += 4 * 400) { tot++; if (img[i] + img[i + 1] + img[i + 2] > 140) bright++; }
+          } catch (e) { pix = 'ERR:' + (e.message || e.name).slice(0, 24); }
           let stack = '';
-          try { const els = document.elementsFromPoint(cx, cy); stack = els.slice(0, 5).map(e => (e.id || e.tagName) + (getComputedStyle(e).opacity !== '1' ? '(op' + getComputedStyle(e).opacity + ')' : '')).join(' > '); } catch (e) { stack = 'e'; }
+          try { const els = document.elementsFromPoint(cx, cy); stack = els.slice(0, 5).map(e => (e.id || e.tagName)).join(' > '); } catch (e) { stack = 'e'; }
           const mcs = getComputedStyle(message);
+          const cvsCss = canvas.style.width + 'x' + canvas.style.height;
           p.textContent =
-            'act=' + state.active + ' intro=' + state.intro.active + ' mode=' + state.messageMode + '\n' +
-            'msg: op=' + mcs.opacity + ' pe=' + mcs.pointerEvents + ' cls=[' + message.className + ']\n' +
-            'cvsPix=' + pix + '  cvs=' + Math.round(r.width) + 'x' + Math.round(r.height) + '@' + Math.round(r.top) + '\n' +
+            'act=' + state.active + ' mode=' + state.messageMode + ' dpr=' + window.devicePixelRatio + '\n' +
+            'cvsBuf=' + canvas.width + 'x' + canvas.height + ' cssSet=' + cvsCss + '\n' +
+            'cvsShow=' + Math.round(r.width) + 'x' + Math.round(r.height) + '@' + Math.round(r.left) + ',' + Math.round(r.top) + '\n' +
+            'cvsPix=' + pix + '  bright=' + bright + '/' + tot + '\n' +
             'STACK: ' + stack;
         } catch (e) { p.textContent = 'diag err: ' + e.message; }
       }, 400);
