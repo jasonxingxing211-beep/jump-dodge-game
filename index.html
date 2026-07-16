@@ -307,48 +307,53 @@
     .tzone-label.shoot-lbl { bottom: 43%; }
     .tzone-label.crouch-lbl{ bottom: 24%; }
 
-    /* 竖屏建议横屏 */
-    #rotateHint {
-      display: none;
-      position: fixed; inset: 0;
-      background: #0a0c16;
-      color: #cdefff;
-      z-index: 50;
-      flex-direction: column;
-      align-items: center; justify-content: center;
-      text-align: center; padding: 30px;
-      font-size: 18px; line-height: 1.9;
-    }
-    #rotateHint .icon { font-size: 64px; margin-bottom: 16px; animation: roticon 2s ease-in-out infinite; }
-    @keyframes roticon { 0%,100% { transform: rotate(0); } 50% { transform: rotate(90deg); } }
+    /* rotateHint 已废弃：改为竖屏布局，不再要求横屏 */
+    #rotateHint { display: none !important; }
 
+    /* ===== 竖屏底部操作区（上游戏 / 下按键） ===== */
+    #mobileControls {
+      display: none;               /* JS 在触屏设备显示 */
+      flex: 1 0 auto;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding: 18px 20px calc(18px + env(safe-area-inset-bottom, 0px));
+      gap: 16px;
+      background: linear-gradient(180deg, rgba(10,14,28,0.25), rgba(8,11,22,0.95));
+      user-select: none; -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: none;
+    }
+    .mc-side { display: flex; align-items: flex-end; gap: 18px; }
+    .mc-btn {
+      width: 64px; height: 64px;
+      border-radius: 50%;
+      border: 2px solid rgba(126,240,255,0.55);
+      background: rgba(30,46,84,0.75);
+      color: #cdefff;
+      font-size: 27px; font-weight: bold;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 3px 12px rgba(0,0,0,0.45), inset 0 0 14px rgba(120,240,255,0.12);
+      touch-action: none; -webkit-tap-highlight-color: transparent;
+      cursor: pointer; user-select: none;
+      transition: transform .08s ease, background .08s ease;
+    }
+    .mc-btn:active { background: rgba(90,210,255,0.55); transform: scale(0.9); }
+    .mc-btn.mc-jump   { width: 84px; height: 84px; font-size: 36px; border-color: rgba(126,255,180,0.75); color: #b6ffd0; }
+    .mc-btn.mc-shoot  { border-color: rgba(255,205,120,0.75); color: #ffe0a0; }
+
+    /* ===== 移动端：竖屏布局 ===== */
     @media (max-width: 820px) {
-      body { align-items: flex-start; }
-      #gameContainer { border-width: 0; border-radius: 0; width: 100%; }
+      html, body { height: 100%; }
+      body { align-items: stretch; }
+      #gameContainer {
+        width: 100%; min-height: 100vh;
+        border-width: 0; border-radius: 0;
+        display: flex; flex-direction: column;
+      }
       #hud div { font-size: 13px; }
       #instructions { font-size: 12px; }
-    }
-
-    /* 横屏手机：整体适配视口，画面完整显示（等比 contain，不溢出） */
-    @media (orientation: landscape) and (max-height: 520px) {
-      html, body { height: 100%; overflow: hidden; }
-      body { align-items: center; }
-      #gameContainer {
-        width: 100vw; height: 100vh;
-        display: flex; flex-direction: column;
-        align-items: center; justify-content: center;
-        border: 0; border-radius: 0;
-      }
-      #hud { width: 100%; flex: 0 0 auto; padding: 6px 12px; }
-      #hud div { font-size: 12px; }
-      canvas {
-        flex: 0 1 auto;
-        min-height: 0;
-        width: auto; height: auto;
-        max-width: 100vw;
-        max-height: calc(100vh - 40px);
-        aspect-ratio: 2 / 1;
-      }
+      #gameCanvas { width: 100%; height: auto; aspect-ratio: 2 / 1; display: block; flex: 0 0 auto; }
+      #mobileControls { display: flex; }
     }
   </style>
 </head>
@@ -386,18 +391,18 @@
         电脑：A/D 移动，W/空格 跳跃，S 下蹲，J 蓄力射击（第二关）。<br>手机：使用屏幕左下移动、右下跳跃/下蹲/射击。
       </div>
     </div>
-    <!-- 触控提示层（Canvas 绘制右侧分区轮廓） -->
-    <canvas id="touchHintCanvas"></canvas>
-    <!-- 全屏透明触控捕获层 -->
-    <div id="touchOverlay"></div>
-    <!-- 区域激活高亮（CSS class 切换） -->
-    <div id="touchControls">
-      <span class="tzone-label jump-lbl" id="lblJump">▲ 跳</span>
-      <span class="tzone-label shoot-lbl" id="lblShoot">✦ 射</span>
-      <span class="tzone-label crouch-lbl" id="lblCrouch">▼ 蹲</span>
+    <!-- 竖屏底部操作区：左手方向，右手动作 -->
+    <div id="mobileControls">
+      <div class="mc-side mc-left">
+        <button class="mc-btn" id="mLeft" aria-label="左移">◀</button>
+        <button class="mc-btn" id="mRight" aria-label="右移">▶</button>
+      </div>
+      <div class="mc-side mc-right">
+        <button class="mc-btn mc-shoot" id="mShoot" aria-label="射击">✦</button>
+        <button class="mc-btn mc-crouch" id="mCrouch" aria-label="下蹲">▼</button>
+        <button class="mc-btn mc-jump" id="mJump" aria-label="跳跃">▲</button>
+      </div>
     </div>
-    <!-- 随落点浮动摇杆 -->
-    <div id="joystick"><div class="jbase"></div><div class="jknob"></div></div>
   </div>
 
   <div id="rotateHint">
@@ -1303,7 +1308,7 @@
       speedEl.textContent = state.speed.toFixed(1);
       document.getElementById('stage').textContent = state.stage;
       document.getElementById('bestScore').textContent = state.bestScore;
-      { const bs = document.getElementById('lblShoot'); if (bs) bs.style.display = 'none'; } // 第一关不需要射击（隐藏射击提示）
+      { const bs = document.getElementById('mShoot'); if (bs) bs.style.display = 'none'; } // 第一关不需要射击（隐藏射击按钮）
       // 第一关进度条：显示并归零
       { const pg = document.getElementById('progress'); if (pg) pg.style.display = 'block'; }
       { const pf = document.getElementById('progressFill'); if (pf) pf.style.width = '0%'; }
@@ -1556,7 +1561,7 @@
       document.getElementById('stage').textContent = state.stage;
       scoreEl.textContent = state.score;
       speedEl.textContent = state.speed.toFixed(1);
-      { const bs = document.getElementById('lblShoot'); if (bs) bs.style.display = ''; } // 第二关显示射击提示
+      { const bs = document.getElementById('mShoot'); if (bs) bs.style.display = ''; } // 第二关显示射击按钮
       // 保留第一关未破的护盾，并同步 HUD 显示（不重置 player.shield）
       { const sh = document.getElementById('shield'); if (sh) { sh.textContent = player.shield ? '有' : '无'; sh.className = player.shield ? 'on' : 'off'; } }
       { const pg = document.getElementById('progress'); if (pg) pg.style.display = 'none'; } // 第二关隐藏进度条
@@ -3678,77 +3683,35 @@
       }
     }
 
-    // ── 事件监听 ──
-    function onTouch(e) {
-      e.preventDefault();
-      const isEnd = e.type === 'touchend' || e.type === 'touchcancel';
-      const type  = isEnd ? (e.type === 'touchcancel' ? 'cancel' : 'end') : (e.type === 'touchstart' ? 'start' : 'move');
-      // end/cancel 时用 changedTouches 检测离开的触点，其余情况用 e.touches
-      processTouches(e.touches, e.changedTouches, type);
-    }
-    if (touchOverlay) {
-      touchOverlay.addEventListener('touchstart',  onTouch, { passive: false });
-      touchOverlay.addEventListener('touchmove',   onTouch, { passive: false });
-      touchOverlay.addEventListener('touchend',    onTouch, { passive: false });
-      touchOverlay.addEventListener('touchcancel', onTouch, { passive: false });
-    }
-    // 兜底：游戏画布上的触控也捕获（防止 overlay 未覆盖）
-    canvas.addEventListener('touchstart',  onTouch, { passive: false });
-    canvas.addEventListener('touchmove',   onTouch, { passive: false });
-    canvas.addEventListener('touchend',    onTouch, { passive: false });
-    canvas.addEventListener('touchcancel', onTouch, { passive: false });
-
     function isMobileLike() {
       return ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
     }
-    function checkOrientation() {
-      const portrait = window.innerHeight > window.innerWidth;
-      const hint = document.getElementById('rotateHint');
-      if (hint) hint.style.display = (isMobileLike() && portrait) ? 'flex' : 'none';
-    }
-    window.addEventListener('resize', checkOrientation);
-    window.addEventListener('orientationchange', checkOrientation);
 
-    if (isMobileLike()) {
-      // 精确对齐触控层至 canvas 的实际位置与尺寸（相对 gameContainer）
-      // 不再用 left:0/right:0/bottom:0 全屏，避免横屏 flex 居中时与 canvas 错位
-      function alignOverlay() {
-        const cont = document.getElementById('gameContainer');
-        if (!canvas || !cont) return;
-        const c = canvas.getBoundingClientRect();
-        const p = cont.getBoundingClientRect();
-        const left = (c.left - p.left) + 'px';
-        const top  = (c.top  - p.top)  + 'px';
-        const w = c.width  + 'px';
-        const h = c.height + 'px';
-        [touchOverlay, touchHintCvs, touchCtrlDiv].forEach(el => {
-          if (!el) return;
-          el.style.left = left;
-          el.style.top = top;
-          el.style.width = w;
-          el.style.height = h;
-          el.style.right = 'auto';
-          el.style.bottom = 'auto';
-        });
-      }
-      // 显示透明触控事件层。touchHintCanvas（提示线层）会视觉遮挡游戏画面，故不显示；
-      // 触控功能由透明的 touchOverlay 捕获，提示由右侧文字标签(touchControls)提供。
-      if (touchOverlay)  touchOverlay.style.display  = 'block';
-      if (touchHintCvs)  touchHintCvs.style.display  = 'none';
-      if (touchCtrlDiv)  touchCtrlDiv.style.display   = 'block';
-      // 摇杆初始隐藏，按下左半屏时才浮现
-      if (joystick) { joystick.style.display = 'none'; joystick.style.opacity = '0'; }
-      // 多次对齐，确保布局稳定后触控层精确覆盖 canvas（不再绘制提示线，避免遮挡画面）
-      const _realign = () => { alignOverlay(); };
-      _realign();
-      setTimeout(_realign, 60);
-      setTimeout(_realign, 300);
-      setTimeout(_realign, 800);
-      window.addEventListener('load', _realign);
-      window.addEventListener('resize', _realign);
-      window.addEventListener('orientationchange', () => { setTimeout(_realign, 350); });
+    // ── 竖屏底部实体按钮：按住触发按键，松开释放（支持长按高跳、连续移动） ──
+    function bindHoldButton(id, code) {
+      const b = document.getElementById(id);
+      if (!b) return;
+      const press = (e) => { if (e.cancelable) e.preventDefault(); pressKey(code); };
+      const release = (e) => { if (e && e.cancelable) e.preventDefault(); releaseKey(code); };
+      b.addEventListener('touchstart', press, { passive: false });
+      b.addEventListener('touchend', release, { passive: false });
+      b.addEventListener('touchcancel', release, { passive: false });
+      // 桌面鼠标兼容（便于电脑上也能点按钮调试）
+      b.addEventListener('mousedown', press);
+      b.addEventListener('mouseup', release);
+      b.addEventListener('mouseleave', () => releaseKey(code));
     }
-    checkOrientation();
+    bindHoldButton('mLeft', 'KeyA');
+    bindHoldButton('mRight', 'KeyD');
+    bindHoldButton('mJump', 'Space');
+    bindHoldButton('mCrouch', 'KeyS');
+    bindHoldButton('mShoot', 'KeyJ');
+
+    // 触屏设备显示底部操作区（竖屏布局：上游戏、下按键）
+    if (isMobileLike()) {
+      const mc = document.getElementById('mobileControls');
+      if (mc) mc.style.display = 'flex';
+    }
 
     // ===== 开场片头「景星出品」→ 流畅浮现开始界面 =====
     let splashActive = true;
