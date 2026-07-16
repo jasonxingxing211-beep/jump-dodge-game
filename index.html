@@ -3804,13 +3804,15 @@
           } catch (e) { pix = 'ERR:' + (e.message || e.name).slice(0, 24); }
           let stack = '';
           try { const els = document.elementsFromPoint(cx, cy); stack = els.slice(0, 5).map(e => (e.id || e.tagName)).join(' > '); } catch (e) { stack = 'e'; }
-          const mcs = getComputedStyle(message);
-          const cvsCss = canvas.style.width + 'x' + canvas.style.height;
+          const ccs = getComputedStyle(canvas);
+          const gcs = getComputedStyle(document.getElementById('gameContainer'));
           p.textContent =
             'act=' + state.active + ' mode=' + state.messageMode + ' dpr=' + window.devicePixelRatio + '\n' +
-            'cvsBuf=' + canvas.width + 'x' + canvas.height + ' cssSet=' + cvsCss + '\n' +
             'cvsShow=' + Math.round(r.width) + 'x' + Math.round(r.height) + '@' + Math.round(r.left) + ',' + Math.round(r.top) + '\n' +
-            'cvsPix=' + pix + '  bright=' + bright + '/' + tot + '\n' +
+            'cvsPix=' + pix + ' bright=' + bright + '/' + tot + '\n' +
+            'cvsCSS op=' + ccs.opacity + ' vis=' + ccs.visibility + ' disp=' + ccs.display + '\n' +
+            'filter=[' + ccs.filter + '] tf=[' + ccs.transform.slice(0, 30) + ']\n' +
+            'gcOpac=' + gcs.opacity + ' winWH=' + window.innerWidth + 'x' + window.innerHeight + '\n' +
             'STACK: ' + stack;
         } catch (e) { p.textContent = 'diag err: ' + e.message; }
       }, 400);
