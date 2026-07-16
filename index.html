@@ -3785,6 +3785,29 @@
     initBackground();
     resetGame();
     renderSkinPicker();
+
+    // 【临时诊断v2】列出 canvas 中心点堆叠的所有元素，揪出遮挡层（确认后移除）
+    (function () {
+      const p = document.createElement('div');
+      p.style.cssText = 'position:fixed;top:0;left:0;z-index:9999999;background:rgba(0,0,0,.82);color:#0f0;font:10px/1.3 monospace;padding:3px 5px;white-space:pre;pointer-events:none;max-width:100%;';
+      document.body.appendChild(p);
+      setInterval(function () {
+        try {
+          const r = canvas.getBoundingClientRect();
+          const cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
+          let pix = '?';
+          try { const d = ctx.getImageData(canvas.width >> 1, canvas.height >> 1, 1, 1).data; pix = d[0] + ',' + d[1] + ',' + d[2]; } catch (e) { pix = 'e'; }
+          let stack = '';
+          try { const els = document.elementsFromPoint(cx, cy); stack = els.slice(0, 5).map(e => (e.id || e.tagName) + (getComputedStyle(e).opacity !== '1' ? '(op' + getComputedStyle(e).opacity + ')' : '')).join(' > '); } catch (e) { stack = 'e'; }
+          const mcs = getComputedStyle(message);
+          p.textContent =
+            'act=' + state.active + ' intro=' + state.intro.active + ' mode=' + state.messageMode + '\n' +
+            'msg: op=' + mcs.opacity + ' pe=' + mcs.pointerEvents + ' cls=[' + message.className + ']\n' +
+            'cvsPix=' + pix + '  cvs=' + Math.round(r.width) + 'x' + Math.round(r.height) + '@' + Math.round(r.top) + '\n' +
+            'STACK: ' + stack;
+        } catch (e) { p.textContent = 'diag err: ' + e.message; }
+      }, 400);
+    })();
   </script>
 </body>
 </html>
